@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="gt-swing-31.5">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/../geotools-31.5/lib/gt-swing-31.5.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

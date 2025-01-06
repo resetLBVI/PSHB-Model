@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="jt-utilities-1.1.26">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/../geotools-31.5/lib/jt-utilities-1.1.26.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
