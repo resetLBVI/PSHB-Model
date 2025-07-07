@@ -7,8 +7,7 @@ import sim.engine.Steppable;
 public class PSHBObserver implements Steppable {
     @Override
     public void step(SimState simState) {
-        //identify the year
-        PSHBEnvironment eState = (PSHBEnvironment) simState;
+        PSHBEnvironment eState = (PSHBEnvironment) simState; //Downcasting the PSHB Environment
         //collect population data
         if(eState.week % 51 == 0) { //get the data in the last week of the year
             collectPopData(eState);
@@ -40,52 +39,5 @@ public class PSHBObserver implements Steppable {
         state.numDeathInADULTCOL = 0;
     }
 
-
-    /*
-     ****************************************************************************************
-     *                                  Setters and Getters
-     * ***************************************************************************************
-     */
-//    //population data collected annually
-//    public int getNumBirth() {
-//        return numBirth;
-//    }
-//
-//    public void setNumBirth(int numBirth) {
-//        this.numBirth += numBirth;
-//    }
-//
-//    public int getNumDeath() {
-//        return numDeath;
-//    }
-//
-//    public void setNumDeath(int numDeath) {
-//        this.numDeath += numDeath;
-//    }
-//
-//    public int getNumDeathInLARVA() {
-//        return numDeathInLARVA;
-//    }
-//
-//    public void setNumDeathInLARVA(int numDeathInLARVA) {
-//        this.numDeathInLARVA += numDeathInLARVA;
-//    }
-//
-//    public int getNumDeathInADULTDISP() {
-//        return numDeathInADULTDISP;
-//    }
-//
-//    public void setNumDeathInADULTDISP(int numDeathInADULTDISP) {
-//        this.numDeathInADULTDISP += numDeathInADULTDISP;
-//    }
-//
-//    public int getNumDeathInADULTCOL() {
-//        return numDeathInADULTCOL;
-//    }
-//
-//    public void setNumDeathInADULTCOL(int numDeathInADULTCOL) {
-//        this.numDeathInADULTCOL += numDeathInADULTCOL;
-//    }
-//    //impact on vegetation
 
 }

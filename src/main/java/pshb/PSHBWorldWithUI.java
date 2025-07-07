@@ -55,8 +55,8 @@ public class PSHBWorldWithUI extends GUIState {
         if(this.displayFrame != null) {
             this.displayFrame.dispose();
         } //if there is a frame, dispose it
-        this.displayFrame = null;
-        this.display = null;
+        this.displayFrame = null; //set the frame as null
+        this.display = null; //set the display as null
     }
 
     public void start() {

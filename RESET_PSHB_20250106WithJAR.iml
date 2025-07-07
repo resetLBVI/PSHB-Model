@@ -27,5 +27,6 @@
     <orderEntry type="library" name="imageio-ext-tiff-1.4.12" level="project" />
     <orderEntry type="library" name="imageio-ext-utilities-1.4.12" level="project" />
     <orderEntry type="library" name="imageio-ext-cog-reader-1.4.12" level="project" />
+    <orderEntry type="library" name="gt-referencing-31.5" level="project" />
   </component>
 </module>

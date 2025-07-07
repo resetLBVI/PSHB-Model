@@ -24,10 +24,9 @@ import java.nio.file.Paths;
 public class PSHBEnvironment extends SimState {
     Path currentRelativePath = Paths.get("");
     String projectPath = currentRelativePath.toAbsolutePath().toString();
-    //input files location
-//    public String inputFile = "/Users/lin1789/Desktop/RESET_PSHB_inputData/PSHB_StartLocations.csv";
+    //input files path
     public String inputFilePath = "/Users/lin1789/Desktop/RESET_PSHB_inputData/";
-    //output files location
+    //output files path
     public String logFile = "/Users/lin1789/Desktop/test_log.txt";
     public String outputFile = "/Users/lin1789/Desktop/test_output.csv";
     public String popSummaryFile = "/Users/lin1789/Desktop/test_popSummary.csv";
@@ -38,10 +37,10 @@ public class PSHBEnvironment extends SimState {
     OutputWriter impactDataWriter;
 
     //Environment parameters are global
-    GeomGridField basicGrid = new GeomGridField();
+    GeomGridField basicGrid = new GeomGridField(); //this is a basic grid shown in the UI (unnecessary)
     GeomGridField[] weeklyTempGrids; // there are 52 temperature grid maps, read them into a list
-    DoubleGrid2D tempGrid;
-    int weekOfTemp = 52;
+    DoubleGrid2D tempGrid; //current temperature grid
+    int weekOfTemp = 52; //there are 52 temperature maps
     public Envelope globalMBR;
     public SparseGrid2D agentDevlopGrid; //this raster map is for agent's development, which is based on the temperature maps
     SparseGrid2D agentColonizedGrid; // this raster map is for agent's colonization and reproduction, which is based on the vegetation maps
@@ -79,7 +78,7 @@ public class PSHBEnvironment extends SimState {
     //Scheduling
     int year = (int)(schedule.getSteps()/52) + 1; //simulation period is 35 years from 1-35;
     int week = (int)(schedule.getSteps() % 52); //the week is from 0-51 in the current year
-    //Summary data
+    //Population summary data
     int populationSize = 0;
     int numBirth = 0; //number of birth
     int numDeath = 0; //number of death
@@ -99,7 +98,7 @@ public class PSHBEnvironment extends SimState {
         this.logWriter.createFile(logHeader);
         // (2) create outputFile
         String[] weeklyOutputHeader = {"step", "agentID", "birthday", "date of death", "lon at birth",
-                "lat at birth", "lon at death", "lat at death", "death stage", "death age"}; //corrently collect 10 data
+                "lat at birth", "lon at death", "lat at death", "death stage", "death age"}; //currently collect 10 data
         this.outputWriter = new OutputWriter(outputFile);
         this.outputWriter.createFile(weeklyOutputHeader);
         // (3) create populationSummaryFile
@@ -111,11 +110,12 @@ public class PSHBEnvironment extends SimState {
         String[] impactDataHeader = {"year", "x", "y", "patchID"}; //currently collect 4 data
         this.impactDataWriter = new OutputWriter(impactFile);
         this.impactDataWriter.createFile(impactDataHeader);
-
+        //import vegetation maps
         importWeeklyRasterMap();
         importTiffVegRasterMaps();
         this.agentDevlopGrid = new SparseGrid2D(this.basicGrid.getGridWidth(), this.basicGrid.getGridHeight());
         this.agentColonizedGrid = new SparseGrid2D(this.basicGrid.getGridWidth(), this.basicGrid.getGridHeight());
+        //make agents
         makeAgentsInSpace();
         //initiate observer
         PSHBObserver observer = new PSHBObserver();
@@ -220,7 +220,7 @@ public class PSHBEnvironment extends SimState {
      *                       Get values from VegRasterMaps
      * **********************************************************************************
      */
-    //ADD
+    //Get the patch ID
     public int getPatchID(PSHBEnvironment state, int vegGridX, int vegGridY) {
         int[] hostRasterData = new int[1];
         int patchID = 0;
@@ -232,7 +232,7 @@ public class PSHBEnvironment extends SimState {
             return patchID;
         }
     }
-    //ADD
+    //Get probability of hosting a cell
     public double getVegMapPrHost(PSHBEnvironment state, double coordX, double coordY) throws TransformException {
         // sample tiff data with at pixel coordinate(get Values)
         int[] hostRasterData = new int[1];

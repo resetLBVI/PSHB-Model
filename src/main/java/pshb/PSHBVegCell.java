@@ -4,17 +4,21 @@ import sim.engine.SimState;
 import sim.engine.Steppable;
 import sim.engine.Stoppable;
 import sim.util.Bag;
-//ADD
-public class PSHBVegCell implements Steppable {
+
+/**
+ * This PSHBVegCell class describe the vegetation cell's birth and death,
+ */
+public class
+PSHBVegCell implements Steppable {
     // vegetation cell's state variables
     Bag members; //create a bag to contain PSHB agents
     int vegGridX; //x location
     int vegGridY; //y location
-    int patchID;
-    int numColonizedAgents; // the capacity of the cell, the default is 5
+    int patchID; //the patch a veg cell belongs to
+    int numColonizedAgents; // the current number of colonized agents should be less than 5 to keep the cell alive. The capacity of the cell is 5
     boolean deadVegetation; //when the cell is dead, it's true
     //scheduling
-    Stoppable event;
+    Stoppable event; //schedule to stop the event
     int week;
 
     //Constructor
@@ -40,11 +44,15 @@ public class PSHBVegCell implements Steppable {
             eState.impactDataWriter.addToFile(Integer.toString(this.vegGridX)); //record the dead cell location x
             eState.impactDataWriter.addToFile(Integer.toString(this.vegGridY)); //record the dead cell location y
             eState.impactDataWriter.addToFile(Integer.toString(this.patchID)); //record the dead cell patch ID
-            death((PSHBEnvironment)state);
-            this.deadVegetation = true;
+            death((PSHBEnvironment)state); //execute the death method
+            this.deadVegetation = true; //claim the death of the vegetation cell == true
         }
     }
 
+    /**
+     * The death method
+     * @param state
+     */
     public void death(PSHBEnvironment state) {
         this.numColonizedAgents = 0;
         event.stop();
