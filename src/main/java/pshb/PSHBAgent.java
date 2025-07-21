@@ -23,6 +23,8 @@ public class PSHBAgent implements Steppable {
     int tempGridY; //y location on the temperature grid map
     int vegGridX; //x location on the vegetation grid map
     int vegGridY; //y location on the vegetation grid map
+    int displayX; //x location on the display window
+    int displayY; //y location on the display window
     int pshbDegDaysReq; //the degree-days an agent is required for development, define in constructor
     int pshbDegDays; //the counts of the degree-days
     int pshbSonDegDays; // the counts of son's degree-days
@@ -32,7 +34,7 @@ public class PSHBAgent implements Steppable {
     boolean pshbDorm; //a state variable indicates if the agent is during the dormancy
     Integer pshbAge; //indicate the current age
     //development
-    DoubleGrid2D tempGrid; //set a temperature grid in the environment
+//    DoubleGrid2D tempGrid; //set a temperature grid in the environment
     double currentTemp; //a state variable to get the current temperature
     //movement (dispersal)
     public double pshbDispDist; // dispersal distance (m)
@@ -46,6 +48,7 @@ public class PSHBAgent implements Steppable {
     double mpPshbVegMapPrHost; //the probability to host a tree in a specific cell (from veg Map_PrHost)
     double mpPshbColSuccess; //the probability successfully colonize a host tree (from veg Map_PrRepr)
     PSHBVegCell pshbHostCell; //an agent will claim a vegCell (a cell entity) only when they colonized a host
+    int patchID; //the patchID an agent occupied
     //reproduction
     public int pshbSpawn; //number of eggs an agent lay
     //other schedule variables
@@ -56,22 +59,29 @@ public class PSHBAgent implements Steppable {
     Map<String, Long> dateData; //a hashmap to record the related date data, e.g., birthday, death date, etc.
     Map<String, Enum> stageData; //a hashmap to record the stage when an event occurs. e.g., death stage
     Map<String, Integer> ageData; //a hashmap to record the age when an event occurs. e.g., death age
-
+    String actionExecuted;
 
 
     public PSHBAgent(PSHBEnvironment state, double longitudeX, double latitudeY, int pshbAgentID, Stage stage) {
         super();
         this.pshbStage = stage; //state an agent's current stage
         this.pshbAgentID = pshbAgentID; //assign each agent a unique ID
+        //first coordinate system
         this.longitudeX = longitudeX; //longitude ie. pshbLong
         this.latitudeY = latitudeY; //latitude ie. pshbLat
+        //second coordinate system
+        this.tempGridX = CoordinateConverter.longitudeXToGridX(longitudeX, state.xllcornerTemp, state.tempCellSize);
+        this.tempGridY = CoordinateConverter.latitudeYToGridY(latitudeY, state.yllcornerTemp, state.tempCellSize, state.nRowsTemp);
+        //third vegetation coordinate system
+        this.vegGridX = CoordinateConverter.longitudeXToGridX(longitudeX, state.xllcornerVeg, state.vegCellSize); //the vegGridX is activated only when the agent colonized a cell
+        this.vegGridY = CoordinateConverter.latitudeYToGridY(latitudeY, state.yllcornerVeg, state.vegCellSize, state.nRowsVeg); //the vegGridY is activated only when the agent colonized a cell
+        //fourth UI display coordinate system
+        displayX = tempGridX * state.agentGrid.getWidth() / state.currentTempGrid.getWidth();
+        displayY = tempGridY * state.agentGrid.getHeight() / state.currentTempGrid.getHeight();
+        this.patchID = 0;
         this.pshbDegDaysReq = (int) (398 + state.random.nextGaussian() * 17); //every agent has slightly different on development
         this.pshbDegDays = 0; //the counts of the degree-days
         this.pshbSonDegDays = 0; // the counts of son's degree-days
-        this.tempGridX = CoordinateConverter.longitudeXToGridX(longitudeX, state.xllcornerTemp, state.tempCellSize);
-        this.tempGridY = CoordinateConverter.latitudeYToGridY(latitudeY, state.yllcornerTemp, state.tempCellSize, state.nRowsTemp);
-        this.vegGridX = 0; //the vegGridX is activated only when the agent colonized a cell
-        this.vegGridY = 0; //the vegGridY is activated only when the agent colonized a cell
         this.pshbMated = false; //indicate if the agent is mated or unmated
         this.pshbLongev = state.random.nextInt(3) + 1; //state an agent's longevity in adult stages (in steps/weeks)
         this.pshbLongevUsed = 0; //countdown of an agent's longevity in the adult stages
@@ -88,33 +98,26 @@ public class PSHBAgent implements Steppable {
         dateData = new HashMap<>(); //collect date related data
         stageData = new HashMap<>(); //collect stage data
         ageData = new HashMap<>(); //collect age data
+        this.actionExecuted = "null";
     }
 
     @Override
     public void step(SimState state) {
-        long startTime = System.currentTimeMillis(); //Testing: test the efficiency of codes, start point
         PSHBEnvironment eState = (PSHBEnvironment) state; //Downcasting the PSHB Environment; Downcasting involves converting a superclass object to its subclass type.
         currentStep = eState.schedule.getSteps(); //get the current steps
-        eState.logWriter.addToFile("========Agent " + this.pshbAgentID + " has started current step = " + currentStep +"==========="); //log current step
-        this.tempGrid = (DoubleGrid2D) eState.weeklyTempGrids[eState.week].getGrid(); //get current temperature map
-        this.currentTemp = this.tempGrid.get(this.tempGridX, this.tempGridY); //obtain current temperature from current temp map based on the locations
-        eState.logWriter.addToFile("current week = " + eState.week + "   Max Temp = " + this.tempGrid.max() + "   this agent's stage " + this.pshbStage); //log basic information of current step
-        long endTime = System.currentTimeMillis(); //Testing: test the code efficiency, end point
-//        System.out.println("Step took " + (endTime - startTime) + " milliseconds");
+        eState.debugWriter.addToFile("========Agent " + this.pshbAgentID + " has started current step = " + currentStep +"==========="); //log current step
+        eState.currentTempGrid = (DoubleGrid2D) eState.weeklyTempGrids[eState.currentWeek].getGrid(); //get current temperature map
+        this.currentTemp = eState.currentTempGrid.get(this.tempGridX, this.tempGridY); //obtain current temperature from current temp map based on the locations
+
         
-        //Step 1: check dormancy before checking the stages
-        //If the dormancy == true, check the stage for the agent
-        //if the agent was in the LARVA or PREOVI stage, there is a chance this agent would die
+        //Step 1: check dormancy before checking the stages. If the dormancy == true, check the stage for the agent; if the agent was in the LARVA or PREOVI stage, there is a chance this agent would die
         if(checkDormancy(eState)){ //if the dormancy is true
             if(this.pshbStage == Stage.LARVA || this.pshbStage == Stage.PREOVI){
-                if(state.random.nextBoolean(2* eState.mpPshbMortLarva)){ //if the agent is randomly chosen to die
-                    eState.logWriter.addToFile("this agent ID = " + this.pshbAgentID + "     lived for " + currentStep + "   days and died in " + this.pshbStage); //record
+                if(state.random.nextBoolean(2* eState.mpPshbMortLarva)){ //2X mortality rate. if the agent is randomly chosen to die
+                    eState.debugWriter.addToFile("this agent ID = " + this.pshbAgentID + "     died at  " + currentStep + "  in its " + this.pshbStage); //record
                     eState.numDeathInLARVA ++; //death count in LARVA stage increased by one
                     eState.numDeath ++; //death count increased by one
-                    long deathStart = System.currentTimeMillis(); //Testing: test how much time the death function costs
                     death(eState); //execute the death method
-                    long deathEnd = System.currentTimeMillis(); //Testing: test how much time the death function costs
-                    System.out.println("Death took " + (deathEnd - deathStart) + " milliseconds"); //testing: how long does the death function cost
                     return; //exit this method
                 }
             } else { //if this agent was in ADULTDISP, ADULTCOL or ADULTREPRO and was under dormancy but not dead, return this step
@@ -123,9 +126,15 @@ public class PSHBAgent implements Steppable {
         }
         //Step 2 : take actions, check the stages, and then perform the actions according to their stage
         takeAction(this.pshbStage, eState); //taking different actions based on the stages
-        //Step 3: age increment
+        //Step 3: Log file
+        String agentStepLog = String.format("%s,%s,%s,%s,%s,%s,%s,%s,%s,%s", currentStep, eState.currentWeek,
+                eState.currentYear, this.pshbAgentID, this.pshbStage, this.pshbAge, this.longitudeX,
+                this.latitudeY, this.patchID, this.actionExecuted);
+        eState.logWriter.addToFile(agentStepLog);
+        this.actionExecuted = "null"; //reset the action executed
+        //Step 4: age increment
         this.pshbAge ++; //age increment in week
-        eState.logWriter.addToFile("===========Agent " + this.pshbAgentID + " finished step " + currentStep + " at   " + this.pshbStage + "===========");
+        eState.debugWriter.addToFile("===========Agent " + this.pshbAgentID + " finished step " + currentStep + " in Stage   " + this.pshbStage + "===========");
     }
     /*
      ********************************************************************************************
@@ -153,7 +162,7 @@ public class PSHBAgent implements Steppable {
     public void performLarvaAction(PSHBEnvironment state) {
         //randomly die when the agent is during larva stage and is not during dormancy
         if(state.random.nextBoolean(state.mpPshbMortLarva)){
-            state.logWriter.addToFile("this agent ID = " + this.pshbAgentID + "     lived for " + currentStep + "   days and died in " + this.pshbStage);
+            state.debugWriter.addToFile("this agent ID = " + this.pshbAgentID + " died in " + this.pshbStage);
             //record the death in the LARVA stage
             state.numDeathInLARVA ++; //death count in LARVA stage increased by one
             state.numDeath ++; //death count increased by one
@@ -164,7 +173,7 @@ public class PSHBAgent implements Steppable {
         //after development, the agent will go into the PREOVI stage within the same tick
         if(this.pshbStage == Stage.PREOVI || d == true){
             if(state.random.nextBoolean(state.mpPshbMortPreovi)){ //some portion of agents will die
-                state.logWriter.addToFile("this agent ID = " + this.pshbAgentID + "     lived for " + currentStep + "   days and died in " + this.pshbStage);
+                state.debugWriter.addToFile("this agent ID = " + this.pshbAgentID + "   died in " + this.pshbStage);
                 state.numDeathInLARVA ++; //death count in LARVA stage increased by one
                 state.numDeath ++; //death count increased by one
                 death(state); //execute the death method
@@ -180,7 +189,7 @@ public class PSHBAgent implements Steppable {
     public void performDISPAction(PSHBEnvironment state) {
         //All agents in the dispersal stage suffer a random death
         if(state.random.nextBoolean(state.mpPshbMortAdultDisp)){ //some portion of agents will die
-            state.logWriter.addToFile("this agent ID = " + this.pshbAgentID + "     lived for " + currentStep + "   days and died in " + this.pshbStage);
+            state.debugWriter.addToFile("this agent ID = " + this.pshbAgentID + "   died in " + this.pshbStage);
             state.numDeathInADULTDISP ++; //death count in DISPERSAL stage increased by one
             state.numDeath ++; //death count increased by one
             death(state); //execute the death method
@@ -202,7 +211,7 @@ public class PSHBAgent implements Steppable {
     public void performColonizationAction(PSHBEnvironment state) {
         //random death in colonization
         if(state.random.nextBoolean(state.mpPshbMortAdultCol)){ //random mortality at colonization stage
-            state.logWriter.addToFile("this agent ID = " + this.pshbAgentID + "     lived for " + currentStep + "   days and died in " + this.pshbStage); //log IDs and which stage they died
+            state.debugWriter.addToFile("this agent ID = " + this.pshbAgentID + "   died in " + this.pshbStage); //log IDs and which stage they died
             state.numDeathInADULTCOL ++; //death count in ADULTCOL stage increased by one
             state.numDeath ++; //death count increased by one
             death(state); //execute the death function
@@ -219,7 +228,7 @@ public class PSHBAgent implements Steppable {
     public void performReproductionAction(PSHBEnvironment state) {
         if(this.pshbMated == true){ //when pshbMated == true, execute the reproduce() because it will reproduce female agents
             reproduce(state,this); //execute the reproduction function
-            state.logWriter.addToFile("This agent " + pshbAgentID + "   finished his life cycle!"); //log the success
+            state.debugWriter.addToFile("This agent " + pshbAgentID + "   finished his life cycle!"); //log the success
             death(state); //execute the death function
         } else { //when pshbMated == false, need to wait the sons developed and turn into be "mated"
             boolean md = maleDevelopment(state); //execute the male development when reproducing sons
@@ -235,15 +244,15 @@ public class PSHBAgent implements Steppable {
 
     public boolean development(PSHBEnvironment state){
         //log the start of development
-        state.logWriter.addToFile("this agent " + this.pshbAgentID + "   has started development"); //start development
-        state.logWriter.addToFile("this pshbDegDaysReq = " + this.pshbDegDaysReq); //specify required Degree-Days
-        state.logWriter.addToFile("this pshbDegDays before = " + this.pshbDegDays); //specify Degree-Days before this development step
+        state.debugWriter.addToFile("this agent " + this.pshbAgentID + "   has started development"); //start development
+        state.debugWriter.addToFile("this pshbDegDaysReq = " + this.pshbDegDaysReq); //specify required Degree-Days
+        state.debugWriter.addToFile("this pshbDegDays before = " + this.pshbDegDays); //specify Degree-Days before this development step
         //degree-day submodel
         if(pshbDegDays < pshbDegDaysReq){ //if the agent hasn't finished development
             if(currentTemp > 15 && currentTemp< 30){ //when current temperature is appropriate, which is 15-30 Celsius
                 pshbDegDays = pshbDegDays + (int) currentTemp * 7; //update the degree-days
             }
-            state.logWriter.addToFile("pshbDegDays after = " + pshbDegDays); //check if the degree days is really updated by comparing before and after
+            state.debugWriter.addToFile("pshbDegDays after = " + pshbDegDays); //check if the degree days is really updated by comparing before and after
             return false; //return a value
         } else{ //when the pshbDegDays reaches the pshbDegDayReq, the development is finished
             pshbDegDays = 0; //reset the degree-days
@@ -254,16 +263,16 @@ public class PSHBAgent implements Steppable {
 
     public boolean maleDevelopment(PSHBEnvironment state){
         //log the start of son's development
-        state.logWriter.addToFile("this mother " + this.pshbAgentID + "   start waiting her son to develop"); //start development
-        state.logWriter.addToFile("the son's pshbDegDaysReq = " + this.pshbDegDaysReq); //the son's degree-days in the same as their mom
-        state.logWriter.addToFile("this pshbSonDegDays before = " + this.pshbSonDegDays); //specify Son's Degree-Days before this development step
+        state.debugWriter.addToFile("this mother " + this.pshbAgentID + "   start waiting her son to develop"); //start development
+        state.debugWriter.addToFile("the son's pshbDegDaysReq = " + this.pshbDegDaysReq); //the son's degree-days in the same as their mom
+        state.debugWriter.addToFile("this pshbSonDegDays before = " + this.pshbSonDegDays); //specify Son's Degree-Days before this development step
         boolean finished = false; //state if the development of male offspring has been finished
         //degree-day submodel
         if(pshbSonDegDays < pshbDegDaysReq){ //if the agent hasn't finished development
             if(currentTemp > 15 && currentTemp< 30){ //if the temperature is appropriate
                 pshbSonDegDays = pshbSonDegDays + (int) currentTemp * 7; //update the degree-days of sons
             }
-            state.logWriter.addToFile("pshbSonDegDays after = " + pshbDegDays); //log the degree days
+            state.debugWriter.addToFile("pshbSonDegDays after = " + pshbDegDays); //log the degree days
         } else{ //if finishing the development
             pshbSonDegDays = 0; //reset the degree days of the sons
             finished = true; //define the son's development has been completed
@@ -278,7 +287,7 @@ public class PSHBAgent implements Steppable {
      */
     //CHANGE
     public void dispersal(PSHBEnvironment state){
-        state.logWriter.addToFile("step = " + state.schedule.getSteps() + "    + BEFORE gridX = " + tempGridX + "     + BEFORE gridY = " + tempGridY);
+        state.debugWriter.addToFile("This agent began dispersal at lon:"    + this.longitudeX+ "   lat: " + this.latitudeY);
         //Determine the Distance
         pshbDispDist = exponentialGenerator.sample(); //the movement distance follows an exponential distribution
         //Determine the Direction
@@ -290,29 +299,42 @@ public class PSHBAgent implements Steppable {
             pshbDispDir = Math.random()*360;
             this.pshbDispDir = Math.toRadians(pshbDispDir); //find random direction in Radians
         }
-        state.logWriter.addToFile("Dispersal Distance =  " + pshbDispDist); //log the dispersal distance
-        state.logWriter.addToFile("pshbDispDirPre = " + pshbDispDirPre); //log previous dispersal direction
-        state.logWriter.addToFile("pshb Dispersal Direction in Radian =  " + pshbDispDir); //log current dispersal direction
+        state.debugWriter.addToFile("Dispersal Distance =  " + pshbDispDist); //log the dispersal distance
+        state.debugWriter.addToFile("pshbDispDirPre = " + pshbDispDirPre); //log previous dispersal direction
+        state.debugWriter.addToFile("pshb Dispersal Direction in Radian =  " + pshbDispDir); //log current dispersal direction
         //Either die or move. If the temperature is out of range - temp<15 or temp > 30, agents will die
-        if(currentTemp < 15 || currentTemp > 30){
-            state.logWriter.addToFile("this agent ID = " + this.pshbAgentID + "     lived for " + currentStep + "   days and died in " + this.pshbStage); //log the death
+        if(currentTemp < 15 || currentTemp > 30){ //the agent died during DISP stage
+            state.debugWriter.addToFile("this agent ID = " + this.pshbAgentID + "  died in " + this.pshbStage); //log the death
             state.numDeathInADULTDISP ++; //death count in DISPERSAL stage increased by one
             state.numDeath ++; //death count increased by one
             death(state);
         } else{ //start movement
-            state.logWriter.addToFile("this agent " + this.pshbAgentID + "   has started movement"); //log the start of dispersal
+            state.debugWriter.addToFile("this agent " + this.pshbAgentID + "   has started movement"); //log the start of dispersal
             //find a new location, using the lon and lat system
             longitudeX = longitudeX + pshbDispDist * Math.cos(pshbDispDir); //new coordinate X
             latitudeY = latitudeY + pshbDispDist * Math.sin(pshbDispDir); //new coordinate Y
-            // the location to the grid map (agentGrid)
-            tempGridX = CoordinateConverter.longitudeXToGridX(longitudeX, state.xllcornerTemp, state.tempCellSize); //new grid X
-            tempGridY = CoordinateConverter.latitudeYToGridY(latitudeY, state.yllcornerTemp, state.tempCellSize, state.nRowsTemp); //new grid Y
-            tempGridX = state.tempGrid.stx(tempGridX); //converts a simulation-space x coordinate into a screen-space (pixel) X coordinate.
-            tempGridY = state.tempGrid.sty(tempGridY); //same for the Y coordinate
-            state.agentDevlopGrid.setObjectLocation(this, tempGridX, tempGridY); //set the agent at the location
-            state.logWriter.addToFile("a new red dot at x = " + this.tempGridX + "   y = " + this.tempGridY); //log the location
-            state.logWriter.addToFile("step = " + state.schedule.getSteps() + "    AFTER gridX = " + tempGridX + "     AFTER gridY = " + tempGridY); //check the location after movement
+            // the location to the vegetation grid map (vegCellGrid which is based on the tiffVeg_Host)
+            vegGridX = CoordinateConverter.longitudeXToGridX(longitudeX, state.xllcornerVeg, state.vegCellSize); //new veg grid X
+            vegGridY = CoordinateConverter.latitudeYToGridY(latitudeY, state.yllcornerVeg, state.vegCellSize, state.nRowsVeg); //new veg grid Y
+            //convert to display location
+            displayX = CoordinateConverter.getTempToDisplayX(state, vegGridX);
+            displayY = CoordinateConverter.getTempToDisplayY(state, vegGridY);
+            state.agentGrid.setObjectLocation(this, displayX, displayY); //set the agent at the location
+            state.debugWriter.addToFile("This agent has dispersed to lon:"    + this.longitudeX+ "   lat: " + this.latitudeY);
         }
+        //Read raster value from the vegetation grid map to check the patchID
+        this.patchID = state.getPatchID(state, vegGridX, vegGridY);
+        if(this.patchID == -1 || this.patchID == 0){
+            //if agents disperse to a place beyond RESET patches, the agen dies
+            state.debugWriter.addToFile("dispersal to patchID = " + this.patchID + "is beyond RESET.");
+            System.out.println("dispersal - patchID = " + this.patchID + "is beyond RESET.");
+            state.numDeath ++;
+            state.debugWriter.addToFile("DISP: disperseOutsideRESET_death"); //debug
+            System.out.println("DISP: disperseOutsideRESET_death");
+            this.actionExecuted = "DISP: disperseOutsideRESET_death"; //log
+            death(state);
+        }
+
 
     }
 
@@ -330,23 +352,22 @@ public class PSHBAgent implements Steppable {
         attemptingColonization = probBasedOnRemainingTicks * this.mpPshbVegMapPrHost; //attempting to colonize = (1) * (2)
         //success probability of colonization is obtained from the PrRepr
         mpPshbColSuccess = state.getVegMapPrRepr(state, this.longitudeX, this.latitudeY); //from veg map PrRepr
-        state.logWriter.addToFile("the attempting colonization probability = " + attemptingColonization);
+        state.debugWriter.addToFile("Colonization: the attempting colonization probability = " + attemptingColonization);
         //attempt to colonize
         if(state.random.nextBoolean(attemptingColonization)){ //determine the probability of attempting colonization, if yes, colonize the tree
             if(state.random.nextBoolean(mpPshbColSuccess)){ //this agent successfully colonized the host tree in the cell
                 //this agent successfully colonized the cell
-                state.logWriter.addToFile("This agent successfully colonized a patch or a cell");
+                state.debugWriter.addToFile("This agent successfully colonized a patch or a cell");
                 //colonize a host by joining in the cell
                 colonizeAHost(state, this.longitudeX, this.latitudeY); //join a vegCell enetity
-                this.pshbHostCell.numColonizedAgents ++; //the cell has a new member!
                 this.pshbStage = Stage.ADULTREPRO; //ready to move to next Stage (ADULTREPRO)
             } else {
                 if(this.pshbRemainingTicks > 0){ //still got time for dispersal
-                    state.logWriter.addToFile("This agent fail to colonize and disperse again."); //log the failure of the colonization
+                    state.debugWriter.addToFile("This agent fail to colonize and disperse again."); //log the failure of the colonization
                     dispersal(state); //dispersal this step or next step???
                 }
                 else {
-                    state.logWriter.addToFile("This agent fail to colonize and die."); //log
+                    state.debugWriter.addToFile("This agent fail to colonize and die."); //log
                     state.numDeathInADULTCOL ++; //death counts in COLONIZATION Stage increased by one
                     state.numDeath ++; //death counts increased by one
                     death(state); //execute the death function
@@ -354,11 +375,11 @@ public class PSHBAgent implements Steppable {
             }
         } else { //if not attempt to colonize the tree
             if(this.pshbRemainingTicks > 0){ //if there is still time for dispersal
-                state.logWriter.addToFile("This agent did not attempt to colonize and disperse again"); //log
+                state.debugWriter.addToFile("This agent did not attempt to colonize and disperse again"); //log
                 dispersal(state); //execute the dispersal function again
             }
             else { //if there is no time for dispersal, the agent die
-                state.logWriter.addToFile("This agent did not attempt to colonize and died");  //log
+                state.debugWriter.addToFile("This agent did not attempt to colonize and died");  //log
                 state.numDeathInADULTCOL ++; //death count in COLONIZATION stage increased by one
                 state.numDeath ++; //death count increase by one
                 death(state); //execute the death function
@@ -374,26 +395,20 @@ public class PSHBAgent implements Steppable {
         } catch (TransformException e) { //catch the exception
             throw new RuntimeException(e);
         }
-        //**check if this cell is in a patch** - this method hasn't been implemented
-        //claim the hostCell based on dispersal locations
-        this.pshbHostCell = state.getVegCell(vegGridX, vegGridY); //the HostCell is an entity of the model
-        this.pshbHostCell.numColonizedAgents ++; //add one capacity
-        //Make sure the cell belong to a patch (i.e., in our study area) before activating a cell
-        //This way makes sure that only the cells within the patch got tracked
-        if(state.getPatchID(state, vegGridX, vegGridY) != 0) { //this cell is within the RESET area
+        //Only the cells within the patch got tracked
+        if(state.getPatchID(state, vegGridX, vegGridY) != 0) {//this agent's patchID (cell) is within the RESET area
+            PSHBVegCell cell = (PSHBVegCell) state.vegCellGrid.get(vegGridX, vegGridY);
             //add this agent into the colonized cell, activate a new cell or join in a current active cell
-            if(state.agentColonizedGrid.getObjectsAtLocation(vegGridX, vegGridY) == null){ //if there is no agent in this location
+            if(cell == null){ //if there is no agent in this location
                 Bag members = new Bag(); //create a bag to contain PSHB members
-                PSHBVegCell newActiveCell = new PSHBVegCell(members, vegGridX, vegGridY, state.getPatchID(state,vegGridX, vegGridY)); //activate a new cell
+                PSHBVegCell newActiveCell = new PSHBVegCell(state, members, vegGridX, vegGridY, state.getPatchID(state,vegGridX, vegGridY)); //activate a new cell
                 state.vegMapCell.put(String.join("-", String.valueOf(newActiveCell.vegGridX), String.valueOf(newActiveCell.vegGridY)), newActiveCell); //set the entity
                 newActiveCell.addCellMembers(this); //add this member into the entity
-                state.agentColonizedGrid.setObjectLocation(newActiveCell, vegGridX, vegGridY); //set the vegCell entity in the space
-                state.logWriter.addToFile("a new active cell at x = " + this.vegGridX + "   y = " + this.vegGridY); //log
             } else { //if there is already someone in this location
-                PSHBVegCell joinCurrentCell = state.getVegCell(vegGridX, vegGridY); //get the active cell
-                joinCurrentCell.addCellMembers(this); //add this current agent into the cell
-                state.agentColonizedGrid.setObjectLocation(joinCurrentCell, vegGridX, vegGridY); //set the entity in the space
+                cell.addCellMembers(this); //join a current active cell
             }
+            pshbHostCell = cell;
+            pshbHostCell.numColonizedAgents ++;
         }
     }
 
@@ -426,7 +441,7 @@ public class PSHBAgent implements Steppable {
     * **********************************************************************
      */
     public boolean checkDormancy(PSHBEnvironment state) {
-        if(state.week <16 && currentTemp < 15 || state.week > 30 && currentTemp < 15) { //during the dormancy time or low/high temp, go dormancy
+        if(state.currentWeek <16 && currentTemp < 15 || state.currentWeek > 30 && currentTemp < 15) { //during the dormancy time or low/high temp, go dormancy
             if(pshbStage == Stage.ADULTDISP) { //if during the DISPERSAL, the agent will die
                 pshbDorm = true;
                 death(state);
@@ -456,7 +471,7 @@ public class PSHBAgent implements Steppable {
                 this.dateData.get("birthday"), this.dateData.get("dateOfDeath"), this.locationData.get("lonAtBirth"),
                 this.locationData.get("latAtBirth"), this.locationData.get("lonAtDeath"), this.locationData.get("latAtDeath"),
                 this.stageData.get("deathStage"), this.ageData.get("deathAge"));
-        state.outputWriter.addToFile(lifeHistoryInfo); //add the information into file
+        state.agentSummaryWriter.addToFile(lifeHistoryInfo); //add the information into file
         //stop the event
         event.stop();
     }

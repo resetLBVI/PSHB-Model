@@ -1,21 +1,21 @@
 package pshb;
 
-import com.vividsolutions.jts.geom.Envelope;
 import org.geotools.api.referencing.crs.CoordinateReferenceSystem;
 import org.geotools.api.referencing.operation.TransformException;
 import org.geotools.coverage.grid.GridCoverage2D;
 import org.geotools.coverage.grid.GridGeometry2D;
 import org.geotools.gce.geotiff.GeoTiffReader;
 import pshb.Utils.*;
+import sim.engine.Schedule;
 import sim.engine.SimState;
 import sim.field.geo.GeomGridField;
 import sim.field.grid.DoubleGrid2D;
+import sim.field.grid.ObjectGrid2D;
 import sim.field.grid.SparseGrid2D;
-import sim.io.geo.ArcInfoASCGridImporter;
+import sim.util.Int2D;
 
 import java.awt.image.Raster;
-import java.io.InputStream;
-import java.nio.file.Files;
+import java.io.IOException;
 import java.util.*;
 import java.io.File;
 import java.nio.file.Path;
@@ -25,37 +25,49 @@ public class PSHBEnvironment extends SimState {
     Path currentRelativePath = Paths.get("");
     String projectPath = currentRelativePath.toAbsolutePath().toString();
     //input files path
-    public String inputFilePath = "/Users/lin1789/Desktop/RESET_PSHB_inputData/";
+//    public String inputFilePath = "/Users/lin1789/Desktop/RESET_PSHB_inputData/";
     //output files path
-    public String logFile = "/Users/lin1789/Desktop/test_log.txt";
-    public String outputFile = "/Users/lin1789/Desktop/test_output.csv";
-    public String popSummaryFile = "/Users/lin1789/Desktop/test_popSummary.csv";
-    public String impactFile = "/Users/lin1789/Desktop/test_impact.csv";
-    OutputWriter logWriter;
-    OutputWriter outputWriter;
-    OutputWriter popSummaryWriter;
-    OutputWriter impactDataWriter;
+    public String debugFile = "RESET_PSHB_debug.txt";
+    public String logFile = "RESET_PSHB_log.csv";
+    public String agentSummaryFile = "RESET_PSHB_agentSummary.csv";
+    public String popSummaryFile = "RESET_PSHB_popSummary.csv";
+    public String impactFile = "RESET_PSHB_impact.csv";
+    public OutputWriter debugWriter;
+    public OutputWriter logWriter;
+    public OutputWriter agentSummaryWriter;
+    public OutputWriter popSummaryWriter;
+    public OutputWriter impactWriter;
 
     //Environment parameters are global
-    GeomGridField basicGrid = new GeomGridField(); //this is a basic grid shown in the UI (unnecessary)
-    GeomGridField[] weeklyTempGrids; // there are 52 temperature grid maps, read them into a list
-    DoubleGrid2D tempGrid; //current temperature grid
+    //(1) weekly temperature maps related
     int weekOfTemp = 52; //there are 52 temperature maps
-    public Envelope globalMBR;
-    public SparseGrid2D agentDevlopGrid; //this raster map is for agent's development, which is based on the temperature maps
-    SparseGrid2D agentColonizedGrid; // this raster map is for agent's colonization and reproduction, which is based on the vegetation maps
+    GeomGridField[] weeklyTempGrids; // there are 52 temperature grid maps, read them into a list
+    public GridGeometry2D tempGridGeometry;
+    public DoubleGrid2D currentTempGrid; //current temperature grid
+    //Grids for UI
+    public SparseGrid2D agentGrid; //agentGrid for UI
+    public SparseGrid2D backgroundGrid; //background image for UI
+    public int displayWidth = 100;
+    public int displayHeight = 100;
+    //grids for vegCells
+    public ObjectGrid2D vegCellGrid; //efficient only if most cells are empty. For placing veg cell objects sparsely
+    //manually map coordinates conversion
     public double xllcornerTemp = -176101.065660700784 + 1500;
     public double yllcornerTemp = -605553.288401709870 + 1500;
     public int tempCellSize = 3000;
     public int nRowsTemp = 172;
-    //veg maps
+    //Coordination Converter: The following four variables are used in manually converting coordinates into grid system. Just in case the crs automation conversion not works
+    double xllcornerVeg = -194862 + 15;
+    double yllcornerVeg = -695325 + 15;
+    int vegCellSize = 30;
+    int nRowsVeg = 23518;
+    //veg maps from two GeoTiff files
     CoordinateReferenceSystem crsPrHost;
     CoordinateReferenceSystem crsPrRepr;
     GridGeometry2D ggPrHost;
     GridGeometry2D ggPrRepr;
-    Raster tiffRasterHost;
-    Raster tiffRasterRepr;
-
+    Raster vegTiffRasterHost;
+    Raster vegTiffRasterRepr;
     //Agent state variables
     public int pshbAgentID = 0;
     //mortality
@@ -76,8 +88,8 @@ public class PSHBEnvironment extends SimState {
     //data collection
     public boolean mpPshbWeeklyOutput = false; //when false, collect the data annually, otherwise, collect the data weekly
     //Scheduling
-    int year = (int)(schedule.getSteps()/52) + 1; //simulation period is 35 years from 1-35;
-    int week = (int)(schedule.getSteps() % 52); //the week is from 0-51 in the current year
+    int currentYear = 0; //simulation period is 35 years from 0-34
+    int currentWeek = 0; //the week is from 0-51 in the current year
     //Population summary data
     int populationSize = 0;
     int numBirth = 0; //number of birth
@@ -92,114 +104,138 @@ public class PSHBEnvironment extends SimState {
 
     public void start() {
         super.start();
-        // (1) create logFile
-        String[] logHeader = {};
-        this.logWriter = new OutputWriter(logFile);
-        this.logWriter.createFile(logHeader);
-        // (2) create outputFile
-        String[] weeklyOutputHeader = {"step", "agentID", "birthday", "date of death", "lon at birth",
-                "lat at birth", "lon at death", "lat at death", "death stage", "death age"}; //currently collect 10 data
-        this.outputWriter = new OutputWriter(outputFile);
-        this.outputWriter.createFile(weeklyOutputHeader);
-        // (3) create populationSummaryFile
-        String[] popSummaryHeader = {"year", "POP size", "Num of Births", "Num of Deaths", "Num Deaths in DEV/PREOVI",
-                "Num Deaths in DISP", "Num Deaths in COL"}; //currently collect 7 data
-        this.popSummaryWriter = new OutputWriter(popSummaryFile);
-        this.popSummaryWriter.createFile(popSummaryHeader);
-        //create impactFile
-        String[] impactDataHeader = {"year", "x", "y", "patchID"}; //currently collect 4 data
-        this.impactDataWriter = new OutputWriter(impactFile);
-        this.impactDataWriter.createFile(impactDataHeader);
-        //import vegetation maps
-        importWeeklyRasterMap();
-        importTiffVegRasterMaps();
-        this.agentDevlopGrid = new SparseGrid2D(this.basicGrid.getGridWidth(), this.basicGrid.getGridHeight());
-        this.agentColonizedGrid = new SparseGrid2D(this.basicGrid.getGridWidth(), this.basicGrid.getGridHeight());
-        //make agents
-        makeAgentsInSpace();
-        //initiate observer
+
+
+        try {
+            //(1) debug
+            String[] debugHeader = {};
+            String debugFile = OutputWriter.getFileName(this.debugFile);
+            this.debugWriter = new OutputWriter(debugFile);
+            this.debugWriter.createFile(debugHeader);
+            // (2) create logFile
+            String[] logHeader = {"currentStep", "currentWeek", "currentYear", "agentID", "Stage", "currentAge",
+                    "longitude", "latitude", "patchID", "actionExecuted"}; //total 10 data
+            String logFile = OutputWriter.getFileName(this.logFile);
+            this.logWriter = new OutputWriter(logFile);
+            this.logWriter.createFile(logHeader);
+            //(3) create agentSummaryFile
+            String[] weeklyAgentSummaryHeader = {"step", "agentID", "birthday", "date of death", "lon at birth",
+                    "lat at birth", "lon at death", "lat at death", "death stage", "death age"}; //currently collect 10 data
+            String agentSummaryFile = OutputWriter.getFileName(this.agentSummaryFile);
+            this.agentSummaryWriter = new OutputWriter(agentSummaryFile);
+            this.agentSummaryWriter.createFile(weeklyAgentSummaryHeader);
+            // (4) create populationSummaryFile
+            String[] popSummaryHeader = {"year", "POP size", "Num of Births", "Num of Deaths", "Num Deaths in DEV/PREOVI",
+                    "Num Deaths in DISP", "Num Deaths in COL"}; //currently collect 7 data
+            String popSummaryFile = OutputWriter.getFileName(this.popSummaryFile);
+            this.popSummaryWriter = new OutputWriter(popSummaryFile);
+            this.popSummaryWriter.createFile(popSummaryHeader);
+            //(5) create impactFile
+            String[] impactDataHeader = {"year", "week", "deadVegetation", "x", "y", "patchID"}; //currently collect 6 data
+            String impactFile = OutputWriter.getFileName(this.impactFile);
+            this.impactWriter = new OutputWriter(impactFile);
+            this.impactWriter.createFile(impactDataHeader);
+            //(6) import weekly temperature raster maps
+            importWeeklyTempRasterMaps();
+            //(7)import vegetation raster maps
+            importTiffVegRasterMaps();
+            //(8) create a background grid
+            backgroundGrid = new SparseGrid2D(displayWidth, displayHeight);
+            Object backgroundAnchor = new Object();
+            backgroundGrid.setObjectLocation(backgroundAnchor, new Int2D(0,0)); //add dummy object to anchor the background image
+            //(9)Initiate other fields (e.g., agentGrid)
+            this.vegCellGrid = new ObjectGrid2D(vegTiffRasterHost.getWidth(), vegTiffRasterHost.getHeight());
+            this.agentGrid = new SparseGrid2D(displayWidth, displayHeight);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        //(10) initiate timer just to update the time
+        PSHBTimer systemTimer = new PSHBTimer();
+        schedule.scheduleRepeating(Schedule.EPOCH, 0, systemTimer);
+        //(11) make agents
+        try {
+            makeAgentsInSpace();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        //(12) initiate observer
         PSHBObserver observer = new PSHBObserver();
         schedule.scheduleRepeating(observer);
         System.out.println("--------------END of the Start Step----------------");
     }
-
-    public void importWeeklyRasterMap() {
-        String fileName = "TempGridReset_week_" + 1 + ".asc";
-        try {
-            System.out.println("reading raster map"); //import 52 maps
-            File initialFile = new File(inputFilePath + fileName);
-            InputStream inputStream = Files.newInputStream(initialFile.toPath());
-
-            System.out.println("fileName = " + fileName);
-            ArcInfoASCGridImporter.read(inputStream, GeomGridField.GridDataType.DOUBLE, this.basicGrid);
-            this.weeklyTempGrids = new GeomGridField[weekOfTemp];
-            for(int i=0; i<weekOfTemp; i++){
-                this.weeklyTempGrids[i] = new GeomGridField();
-                File continueFile = new File(inputFilePath + String.format("TempGridReset_week_%d.asc", i+1));
-                inputStream = Files.newInputStream(continueFile.toPath());
-                System.out.println("fileName = " + String.format("TempGridReset_week_%d.asc", i+1));
-                ArcInfoASCGridImporter.read(inputStream, GeomGridField.GridDataType.DOUBLE, this.weeklyTempGrids[i]);
-            }
-            this.tempGrid = (DoubleGrid2D) this.weeklyTempGrids[0].getGrid();
-//            this.tempGrid = (SparseGrid2D) this.weeklyTempGrids[0].getGrid();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        globalMBR = this.basicGrid.getMBR();
-        this.basicGrid.setMBR(globalMBR);
+    //New
+    public void importWeeklyTempRasterMaps() {
+       try {
+           System.out.println("reading weekly temperature raster map");
+           this.weeklyTempGrids = new GeomGridField[weekOfTemp];
+           for(int i=0; i<weekOfTemp; i++){
+               // Create a new GeomGridField and read GeoTIFF into it
+               this.weeklyTempGrids[i] = new GeomGridField();
+               String fileName = OutputWriter.getFileName("/RESET_PSHB_inputData/" + String.format("TempGridReset_week_%d.tif", i + 1));
+               File continueFile = new File(fileName);
+               GeoTiffReader reader = new GeoTiffReader(continueFile);
+               GridCoverage2D covTemp = reader.read(null);
+               this.tempGridGeometry = covTemp.getGridGeometry();
+           }
+           this.currentTempGrid = (DoubleGrid2D) this.weeklyTempGrids[0].getGrid();
+       } catch (Exception e) {
+           e.printStackTrace();
+       }
     }
 
-    //ADD
-    public void importTiffVegRasterMaps() {
-        File tiffVegRaster_PrHost = new File(inputFilePath + "VegRaster_PrHost_20240730.tif");
-        File tiffVegRaster_PrRepr = new File(inputFilePath + "VegRaster_PrRepr_20240730.tif");
-        try {
-            GeoTiffReader reader_PrHost = new GeoTiffReader(tiffVegRaster_PrHost);
-            GeoTiffReader reader_PrRepr = new GeoTiffReader(tiffVegRaster_PrRepr);
-            GridCoverage2D covPrHost = reader_PrHost.read(null);
-            GridCoverage2D covPrRepr = reader_PrRepr.read(null);
-            tiffRasterHost = covPrHost.getRenderedImage().getData();
-            tiffRasterRepr = covPrRepr.getRenderedImage().getData();
-            // get x, y bounds
-            System.out.println("Raster Host bounds = " + tiffRasterHost.getBounds());
-            System.out.println("Raster Repr bounds = " + tiffRasterRepr.getBounds());
-            // get lon, lat bounds (longitude supplied first)
-            System.out.println(covPrHost.getEnvelope());
-            System.out.println(covPrRepr.getEnvelope());
-            //making use of the coordinate reference system
-            crsPrHost = covPrHost.getCoordinateReferenceSystem2D();
-            crsPrRepr = covPrRepr.getCoordinateReferenceSystem2D();
-            //Returns a math transform for the two dimensional part for conversion from world to grid coordinates.
-            ggPrHost = covPrHost.getGridGeometry();
-            ggPrRepr = covPrRepr.getGridGeometry();
+    public void importTiffVegRasterMaps() throws IOException {
+        String tiffVegRasterFileName_PrHost = OutputWriter.getFileName("RESET_PSHB_inputData/VegRaster_PrHost_20240730.tif");
+        String tiffVegRasterFileName_PrRepr = OutputWriter.getFileName("RESET_PSHB_inputData/VegRaster_PrRepr_20240730.tif");
+        File tiffVegRaster_PrHost = new File(tiffVegRasterFileName_PrHost);
+        File tiffVegRaster_PrRepr = new File(tiffVegRasterFileName_PrRepr);
 
-        } catch (Exception e ) {
-            e.printStackTrace();
-        }
+        GeoTiffReader reader_PrHost = new GeoTiffReader(tiffVegRaster_PrHost);
+        GeoTiffReader reader_PrRepr = new GeoTiffReader(tiffVegRaster_PrRepr);
+        GridCoverage2D covPrHost = reader_PrHost.read(null);
+        GridCoverage2D covPrRepr = reader_PrRepr.read(null);
+
+        vegTiffRasterHost = covPrHost.getRenderedImage().getData();
+        vegTiffRasterRepr = covPrRepr.getRenderedImage().getData();
+        // get x, y bounds
+        System.out.println("Raster Host bounds = " + vegTiffRasterHost.getBounds());
+        System.out.println("Raster Repr bounds = " + vegTiffRasterRepr.getBounds());
+        // get lon, lat bounds (longitude supplied first)
+        System.out.println(covPrHost.getEnvelope());
+        System.out.println(covPrRepr.getEnvelope());
+        //making use of the coordinate reference system
+        crsPrHost = covPrHost.getCoordinateReferenceSystem2D();
+        crsPrRepr = covPrRepr.getCoordinateReferenceSystem2D();
+        //Returns a math transform for the two dimensional part for conversion from world to grid coordinates.
+        ggPrHost = covPrHost.getGridGeometry();
+        ggPrRepr = covPrRepr.getGridGeometry();
     }
 
+    //update week and year
+    public void updateWeek() { this.currentWeek = (int)(schedule.getSteps() % 52); }
+
+    public void updateYear() {this.currentYear = (int)(schedule.getSteps() / 52); }
 
     /*
      *********************************************************************************
      *                           MAKE AGENTS IN THE SPACE
      * ********************************************************************************
      */
-    public void makeAgentsInSpace(){
-        String startLocations = inputFilePath + "PSHB_StartLocations.csv";
+    public void makeAgentsInSpace() throws IOException {
+        String startLocations = OutputWriter.getFileName("RESET_PSHB_inputData/PSHB_StartLocations.csv");
         InputDataParser parser = new InputDataParser(startLocations); //initiate a new inputDataParser class
         Map<Integer, InfoIdentifier> initialInfo = parser.getDataInformation(); //get all groupInfo
         int nInitialLocations = initialInfo.size(); // # of initial location
-        for(int i=1; i<nInitialLocations; i++){
+        for (int i = 1; i < nInitialLocations; i++) {
             InfoIdentifier info = initialInfo.get(i);
             double inputCoordX = info.getInputX();
             double inputCoordY = info.getInputY();
-            int tempX = CoordinateConverter.longitudeXToGridX(inputCoordX, xllcornerTemp, tempCellSize); //the x location on the temp map
-            int tempY = CoordinateConverter.latitudeYToGridY(inputCoordY, yllcornerTemp, tempCellSize, nRowsTemp); //the y location on the temp map
+//            int tempX = CoordinateConverter.longitudeXToGridX(inputCoordX, xllcornerTemp, tempCellSize); //the x location on the temp map
+//            int tempY = CoordinateConverter.latitudeYToGridY(inputCoordY, yllcornerTemp, tempCellSize, nRowsTemp); //the y location on the temp map
             int nAgentsAtLocation = info.getNumOfPSHBAgents();
-            for(int j=0; j<nAgentsAtLocation; j++){
+            for (int j = 0; j < nAgentsAtLocation; j++) {
                 PSHBAgent a = makeAgent(inputCoordX, inputCoordY, Stage.LARVA);
                 a.event = schedule.scheduleRepeating(a);
-                agentDevlopGrid.setObjectLocation(a, tempX, tempY);
+                agentGrid.setObjectLocation(a, a.displayX, a.displayY);
             }
         }
     }
@@ -224,7 +260,7 @@ public class PSHBEnvironment extends SimState {
     public int getPatchID(PSHBEnvironment state, int vegGridX, int vegGridY) {
         int[] hostRasterData = new int[1];
         int patchID = 0;
-        state.tiffRasterHost.getPixel(vegGridX, vegGridY, hostRasterData);
+        state.vegTiffRasterHost.getPixel(vegGridX, vegGridY, hostRasterData);
         if(hostRasterData[0] > 100000) { //not a patch
             return patchID = 0;
         } else { //it's a patch, return the patchID
@@ -245,7 +281,7 @@ public class PSHBEnvironment extends SimState {
         } catch (TransformException e) {
             throw new RuntimeException(e);
         }
-        state.tiffRasterHost.getPixel(posGridX, posGridY, hostRasterData);
+        state.vegTiffRasterHost.getPixel(posGridX, posGridY, hostRasterData);
         if(hostRasterData[0] > 100000) {
             hostProb = (hostRasterData[0] - 100000) / 100 ;
         } else {
@@ -265,7 +301,7 @@ public class PSHBEnvironment extends SimState {
         } catch (TransformException e) {
             throw new RuntimeException(e);
         }
-        state.tiffRasterRepr.getPixel(posGridX, posGridY, reprRasterData);
+        state.vegTiffRasterRepr.getPixel(posGridX, posGridY, reprRasterData);
         return reprRasterData[0];
     }
 
@@ -280,29 +316,12 @@ public class PSHBEnvironment extends SimState {
      *                           Getters and Setters
      * ********************************************************************************
      */
-
-    public String getInputFilePath() {
-        return inputFilePath;
-    }
-
-    public void setInputFilePath(String inputFilePath) {
-        this.inputFilePath = inputFilePath;
-    }
-
     public String getLogFile() {
         return logFile;
     }
 
     public void setLogFile(String logFile) {
         this.logFile = logFile;
-    }
-
-    public String getOutputFile() {
-        return outputFile;
-    }
-
-    public void setOutputFile(String outputFile) {
-        this.outputFile = outputFile;
     }
 
     public String getPopSummaryFile() { return popSummaryFile; }
@@ -390,5 +409,31 @@ public class PSHBEnvironment extends SimState {
     public boolean isMpPshbWeeklyOutput() {
         return mpPshbWeeklyOutput;
     }
+
+    //old
+//    public void importWeeklyRasterTempMap() {
+//        String fileName = "TempGridReset_week_" + 1 + ".asc";
+//        try {
+//            System.out.println("reading raster map"); //import 52 maps
+//            File initialFile = new File(inputFilePath + fileName);
+//            InputStream inputStream = Files.newInputStream(initialFile.toPath());
+//            System.out.println("fileName = " + fileName);
+//            ArcInfoASCGridImporter.read(inputStream, GeomGridField.GridDataType.DOUBLE, this.basicGrid);
+//            this.weeklyTempGrids = new GeomGridField[weekOfTemp];
+//            for(int i=0; i<weekOfTemp; i++){
+//                this.weeklyTempGrids[i] = new GeomGridField();
+//                File continueFile = new File(inputFilePath + String.format("TempGridReset_week_%d.asc", i+1));
+//                inputStream = Files.newInputStream(continueFile.toPath());
+//                System.out.println("fileName = " + String.format("TempGridReset_week_%d.asc", i+1));
+//                ArcInfoASCGridImporter.read(inputStream, GeomGridField.GridDataType.DOUBLE, this.weeklyTempGrids[i]);
+//            }
+//            this.tempGrid = (DoubleGrid2D) this.weeklyTempGrids[0].getGrid();
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//        }
+//        globalMBR = this.basicGrid.getMBR();
+//        this.basicGrid.setMBR(globalMBR);
+//    }
+
 
 }

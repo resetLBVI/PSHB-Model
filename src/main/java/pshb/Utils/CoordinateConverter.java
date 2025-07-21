@@ -7,6 +7,7 @@ import org.geotools.coverage.grid.GridEnvelope2D;
 import org.geotools.coverage.grid.GridGeometry2D;
 import org.geotools.geometry.Position2D;
 import org.geotools.geometry.jts.ReferencedEnvelope;
+import pshb.PSHBEnvironment;
 
 public class CoordinateConverter {
 
@@ -38,5 +39,13 @@ public class CoordinateConverter {
         System.out.println(coords[0]); //longitude supplied first
         System.out.println(coords[1]);
         return coords;
+    }
+
+    public static int getTempToDisplayX (PSHBEnvironment state, int tempGridX) {
+        return tempGridX * state.agentGrid.getWidth() / state.currentTempGrid.getWidth();
+    }
+
+    public static int getTempToDisplayY (PSHBEnvironment state, int tempGridY) {
+        return tempGridY * state.agentGrid.getWidth() / state.currentTempGrid.getWidth();
     }
 }
