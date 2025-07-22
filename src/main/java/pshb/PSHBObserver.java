@@ -9,7 +9,7 @@ public class PSHBObserver implements Steppable {
     public void step(SimState simState) {
         PSHBEnvironment eState = (PSHBEnvironment) simState; //Downcasting the PSHB Environment
         //collect population data
-        if(eState.week % 51 == 0) { //get the data in the last week of the year
+        if(eState.currentWeek % 51 == 0) { //get the data in the last week of the year
             collectPopData(eState);
             reset(eState);
         }
@@ -23,10 +23,10 @@ public class PSHBObserver implements Steppable {
      */
     public void collectPopData(PSHBEnvironment state) {
         //start writing
-        System.out.println("week in Data Collection " + state.week);
+        System.out.println("week in Data Collection " + state.currentWeek);
         state.populationSize = state.agentDevlopGrid.getAllObjects().size();
         String popInfo = String.format("%s,%s,%s,%s,%s,%s,%s",
-                state.year, state.populationSize, state.numBirth, state.numDeath, state.numDeathInLARVA, state.numDeathInADULTDISP,
+                state.currentYear, state.populationSize, state.numBirth, state.numDeath, state.numDeathInLARVA, state.numDeathInADULTDISP,
                 state.numDeathInADULTCOL);
         state.popSummaryWriter.addToFile(popInfo);
     }
