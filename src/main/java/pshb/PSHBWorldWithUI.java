@@ -10,6 +10,10 @@ import sim.portrayal.grid.SparseGridPortrayal2D;
 import sim.portrayal.simple.OvalPortrayal2D;
 import sim.util.gui.SimpleColorMap;
 
+import pshb.Utils.ImageIOSetup;
+import org.geotools.coverage.grid.io.imageio.MaskOverviewProvider;
+import javax.imageio.spi.IIORegistry;
+
 import javax.swing.*;
 import java.awt.*;
 
@@ -21,9 +25,22 @@ import java.awt.*;
  */
 
 public class PSHBWorldWithUI extends GUIState {
+    static {
+        // Set early system properties (you already did this)
+        System.setProperty("org.geotools.coverage.grid.io.imageio.mask.overviews.enabled", "false");
+
+        // Force SPI cleanup — unregister the faulty provider
+        try {
+            IIORegistry registry = IIORegistry.getDefaultInstance();
+            registry.deregisterServiceProvider(MaskOverviewProvider.class);
+            System.out.println("✅ MaskOverviewProvider unregistered");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
     Display2D display; //create a display
     JFrame displayFrame; //create a display frame
-    //    GeomVectorFieldPortrayal vegetationPortrayal = new GeomVectorFieldPortrayal();
+    //    GeomVectorFieldPortrayasl vegetationPortrayal = new GeomVectorFieldPortrayal();
     FastValueGridPortrayal2D temperatureGridPortrayal = new FastValueGridPortrayal2D("temperature grid");
     FastValueGridPortrayal2D vegGridPortrayal = new FastValueGridPortrayal2D("vegetation grid");
     SparseGridPortrayal2D PSHBAgentPortrayal = new SparseGridPortrayal2D();
@@ -81,6 +98,9 @@ public class PSHBWorldWithUI extends GUIState {
 
 
     public static void main(String[] args) {
+        // Force registration of JAI ImageIO service providers
+        ImageIOSetup.registerJAIImageIOSpis();
+
         PSHBWorldWithUI worldGUI = new PSHBWorldWithUI();
         Console console = new Console(worldGUI);
         console.setVisible(true);

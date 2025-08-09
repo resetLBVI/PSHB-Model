@@ -82,7 +82,7 @@ public class PSHBAgent implements Steppable {
         this.pshbDispDist = 0; //dispersal distance (m)
         this.pshbRemainingTicks = this.pshbLongev; //the remaining ticks to the end of the adult stage (i.e., to the death)
         this.exponentialGenerator = new ExponentialDistribution(state.mpPshbMove); //determine a number for moving distance
-        this.pshbSpawn = Calculation.getPoisson(1/state.mpPshbSpawn); //number of eggs an agent lay follows a poisson dist.
+        this.pshbSpawn = 0; //number of eggs an agent lay follows a poisson dist.
         this.pshbAge = 0; //the current age
         this.pshbHostCell = null; //a vegCell (a cell entity) is claimed when they colonized a host
         //weekly data output
@@ -97,6 +97,7 @@ public class PSHBAgent implements Steppable {
     public void step(SimState state) {
         PSHBEnvironment eState = (PSHBEnvironment) state; //Downcasting the PSHB Environment; Downcasting involves converting a superclass object to its subclass type.
         currentStep = eState.schedule.getSteps(); //get the current steps
+        System.out.println("========Agent " + this.pshbAgentID + " has started current step = " + currentStep +"==========="); //debugging
         eState.debugWriter.addToFile("========Agent " + this.pshbAgentID + " has started current step = " + currentStep +"==========="); //log current step
         this.currentTempGrid = (DoubleGrid2D) eState.weeklyTempGrids[eState.currentWeek].getGrid(); //get current temperature map
         this.currentTemp = this.currentTempGrid.get(this.tempGridX, this.tempGridY); //obtain current temperature from current temp map based on the locations
@@ -149,6 +150,7 @@ public class PSHBAgent implements Steppable {
                 break;
             case ADULTREPRO:
                 performReproductionAction(state); //execute actions in the Reproduction stage
+                break;
             default: //print the "unknow stage" so we know there is something wrong
                 System.out.println("Unknown stage");
                 break;
@@ -163,6 +165,7 @@ public class PSHBAgent implements Steppable {
             state.numDeath ++; //death count increased by one
             this.actionExecuted = "larva randomly death";
             death(state); //execute the death method
+            return;
         }
         //if not dead, start development action
         boolean d = development(state);
@@ -180,6 +183,7 @@ public class PSHBAgent implements Steppable {
                     this.pshbStage = Stage.ADULTDISP; //this agent is ready to move on to the DISP stage
                     this.actionExecuted = "finish development, ready for ADULTDISP, mated";
                 } else { //what if the agent in the PREOVI stage but not mated?
+                    this.pshbMated = false; //this agent is unmated, but still can reproduce
                     this.pshbStage = Stage.ADULTDISP; //still get into next stage
                     this.actionExecuted = "finish development, ready for ADULTDISP, unmated";
                 }
@@ -195,6 +199,7 @@ public class PSHBAgent implements Steppable {
             state.numDeath ++; //death count increased by one
             this.actionExecuted = "ADULTDISP randomly death";
             death(state); //execute the death method
+            return;
         }
         //should I stay? Determine if this agent will stay in the cell
         if(state.random.nextBoolean(state.mpPshbShouldIStay)){ //yes, the agent wants to stay, but need to check if the cell is available
@@ -209,6 +214,7 @@ public class PSHBAgent implements Steppable {
         } else { // not want to stay, dispersal anyway
             this.actionExecuted = "not stay, do dispersal";
             dispersal(state); //execute the dispersal sub-model
+//            this.pshbStage = Stage.ADULTCOL;
         }
         this.pshbLongevUsed ++; //the age is increased by one
     }
@@ -234,7 +240,7 @@ public class PSHBAgent implements Steppable {
     public void performReproductionAction(PSHBEnvironment state) {
         if(this.pshbMated == true){ //when pshbMated == true, execute the reproduce() because it will reproduce female agents
             reproduce(state,this); //execute the reproduction function
-            state.debugWriter.addToFile("This agent " + pshbAgentID + "   finished his life cycle!"); //log the success
+            state.debugWriter.addToFile("This agent " + pshbAgentID + "   reproduced and finished his life cycle!"); //log the success
             this.actionExecuted = "reproduced and finished his life cycle";
             death(state); //execute the death function
         } else { //when pshbMated == false, need to wait the sons developed and turn into be "mated"
@@ -322,6 +328,7 @@ public class PSHBAgent implements Steppable {
             state.numDeath ++; //death count increased by one
             this.actionExecuted = "ADULTDISP death due to inappropriate temperature";
             death(state);
+            return;
         } else{ //start movement
             state.debugWriter.addToFile("this agent " + this.pshbAgentID + "   has started movement"); //log the start of dispersal
             //find a new location, using the lon and lat system
@@ -356,17 +363,12 @@ public class PSHBAgent implements Steppable {
             death(state);
             return;
         }
-        System.out.println("pshbRemainingTicks: " + pshbRemainingTicks); //debugging
         //calculate the probability of attempting colonization
         probBasedOnRemainingTicks = (5 - pshbRemainingTicks) * 0.2; //(1) first multiplicand, section 7.3, i.e.,(1 - 0.2 * pshbRemainingTicks)
-        System.out.println("probBasedOnRemainingTicks: " + probBasedOnRemainingTicks); //debugging
         mpPshbVegMapPrHost = state.getVegMapPrHost(state, this.longitudeX, this.latitudeY); //(2) second multiplicand - from veg map PrHost
-        System.out.println("mpPshbVegMapPrHost: " + mpPshbVegMapPrHost);
         attemptingColonization = probBasedOnRemainingTicks * this.mpPshbVegMapPrHost; //attempting to colonize = (1) * (2)
         //success probability of colonization is obtained from the PrRepr
         mpPshbColSuccess = state.getVegMapPrRepr(state, this.longitudeX, this.latitudeY); //from veg map PrRepr
-        System.out.println(" test: attemptingColonization = " + attemptingColonization);
-        System.out.println(" test: mpPshbColSuccess = " + mpPshbColSuccess);
         state.debugWriter.addToFile("the attempting colonization probability = " + attemptingColonization);
         state.debugWriter.addToFile("the colonization sucess probability = " + mpPshbColSuccess);
         //attempt to colonize
@@ -421,7 +423,7 @@ public class PSHBAgent implements Steppable {
             //add this agent into the colonized cell, activate a new cell or join in a current active cell
             if(state.agentColonizedGrid.getObjectsAtLocation(vegGridX, vegGridY) == null){ //if there is no agent in this location
                 Bag members = new Bag(); //create a bag to contain PSHB members
-                PSHBVegCell newActiveCell = new PSHBVegCell(members, vegGridX, vegGridY, state.getPatchID(state,vegGridX, vegGridY)); //activate a new cell
+                PSHBVegCell newActiveCell = new PSHBVegCell(state, members, vegGridX, vegGridY, state.getPatchID(state,vegGridX, vegGridY)); //activate a new cell
                 state.vegMapCell.put(String.join("-", String.valueOf(newActiveCell.vegGridX), String.valueOf(newActiveCell.vegGridY)), newActiveCell); //set the entity
                 newActiveCell.addCellMembers(this); //add this member into the entity
                 this.pshbHostCell.numColonizedAgents ++; //the cell has a new member!
@@ -448,9 +450,16 @@ public class PSHBAgent implements Steppable {
     public void reproduce(PSHBEnvironment state, PSHBAgent parent){
         double coordX_newborn = parent.longitudeX; //define the newborn's x location as parents'
         double coordY_newborn = parent.latitudeY; //define the newborn's y location as parents'
+        this.pshbSpawn = Calculation.getPoisson(state.mpPshbSpawn); //everytime will be different?
+        System.out.println("number of eggs produced: " + this.pshbSpawn);
+        if(this.pshbSpawn ==0) {
+            return;
+        }
         for(int i=0; i< parent.pshbSpawn; i++) { //loop for all the offspring
             state.pshbAgentID ++; //define an unique ID for the newborn
             PSHBAgent a = new PSHBAgent(state, coordX_newborn, coordY_newborn, state.pshbAgentID, Stage.LARVA); //create a newborn
+            a.event = state.schedule.scheduleRepeating(a);
+            state.agentDevlopGrid.setObjectLocation(a,a.tempGridX,a.tempGridY);
             System.out.println("pshbAgentID = " + a.pshbAgentID + "is a newborn!!"); //print this newborn in the console
             state.debugWriter.addToFile("pshbAgentID = " + a.pshbAgentID + "is a newborn!!");
             a.dateData.put("birthday", currentStep); //record the birthday

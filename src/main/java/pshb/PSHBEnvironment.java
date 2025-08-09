@@ -24,6 +24,14 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 public class PSHBEnvironment extends SimState {
+    static {
+        // Set before anything loads GeoTools
+        System.setProperty("org.geotools.referencing.forceXY", "true");
+        System.setProperty("org.geotools.referencing.factory.epsg", "true");
+        System.setProperty("com.sun.media.imageio.disableCodecLib", "true");
+        System.setProperty("org.geotools.coverage.grid.io.imageio.MaskOverviewProvider.spi.disable", "true");
+        System.setProperty("org.geotools.coverage.grid.io.imageio.mask.overviews.enabled", "false");
+    }
     Path currentRelativePath = Paths.get("");
     String projectPath = currentRelativePath.toAbsolutePath().toString();
     //input and output files path
@@ -190,8 +198,13 @@ public class PSHBEnvironment extends SimState {
     public void importTiffVegRasterMaps() throws IOException {
         String hostPrFileName = OutputWriter.getFileName("RESET_PSHB_inputData/VegRaster_PrHost_20240730.tif", true);
         String reprPrFileName = OutputWriter.getFileName("RESET_PSHB_inputData/VegRaster_PrRepr_20240730.tif", true);
+        hostPrFileName = hostPrFileName.replace("%20", " ");
+        reprPrFileName = reprPrFileName.replace("%20", " ");
         File tiffVegRaster_PrHost = new File(hostPrFileName);
         File tiffVegRaster_PrRepr = new File(reprPrFileName);
+        System.out.println("Trying to read: " + tiffVegRaster_PrHost.getAbsolutePath());
+        System.out.println("Exists? " + tiffVegRaster_PrHost.exists());
+        System.out.println("Can read? " + tiffVegRaster_PrHost.canRead());
 
         GeoTiffReader reader_PrHost = new GeoTiffReader(tiffVegRaster_PrHost);
         GeoTiffReader reader_PrRepr = new GeoTiffReader(tiffVegRaster_PrRepr);

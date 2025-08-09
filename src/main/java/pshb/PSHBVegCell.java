@@ -19,10 +19,9 @@ PSHBVegCell implements Steppable {
     boolean deadVegetation; //when the cell is dead, it's true
     //scheduling
     Stoppable event; //schedule to stop the event
-    int week;
 
     //Constructor
-    public PSHBVegCell(Bag members, int vegGridX, int vegGridY, int patchID) {
+    public PSHBVegCell(PSHBEnvironment state,Bag members, int vegGridX, int vegGridY, int patchID) {
         this.members = members;
         this.vegGridX = vegGridX;
         this.vegGridY = vegGridY;
@@ -33,21 +32,21 @@ PSHBVegCell implements Steppable {
             PSHBAgent a = (PSHBAgent) members.objs[i];
             a.setPshbHostCell(this);
         }
-//        String activateInfo = String.format("%s,%s,%s,%s,%s,%s", state.currentYear, state.currentWeek,
-//                this.deadVegetation, this.vegGridX, this.vegGridY, patchID);
-//        eState.impactWriter.addToFile(activateInfo);
+        String activateInfo = String.format("%s,%s,%s,%s,%s,%s", state.currentYear, state.currentWeek,
+                this.deadVegetation, this.vegGridX, this.vegGridY, patchID);
+        state.impactWriter.addToFile(activateInfo);
     }
 
     @Override
     public void step(SimState state) {
         PSHBEnvironment eState = (PSHBEnvironment) state;
-        this.week = (int)(eState.schedule.getSteps() % 52); //the week is from 0-51 in the current year
-        if(numColonizedAgents >= 5 && this.week ==1) { //update in the second week of the year
+        if(numColonizedAgents >= 5 && eState.currentWeek ==1) { //update in the second week of the year
             //collect impact data when a cell is dead - collect "year" "vegGridX" "vegGridY" "patchID"
             numColonizedAgents = 0; //reset
             this.deadVegetation = true;
             String impactInfo = String.format("%s,%s,%s,%s,%s,%s", eState.currentYear, eState.currentWeek,
                     this.deadVegetation, this.vegGridX, this.vegGridY, this.patchID);
+            eState.impactWriter.addToFile(impactInfo);
             death((PSHBEnvironment)state); //execute the death method
         }
     }
