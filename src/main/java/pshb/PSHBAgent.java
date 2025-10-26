@@ -4,6 +4,7 @@ import org.apache.commons.math3.distribution.ExponentialDistribution;
 import org.geotools.api.referencing.operation.TransformException;
 import pshb.Utils.Calculation;
 import pshb.Utils.CoordinateConverter;
+import sim.engine.Schedule;
 import sim.engine.SimState;
 import sim.engine.Steppable;
 import sim.engine.Stoppable;
@@ -97,7 +98,7 @@ public class PSHBAgent implements Steppable {
     public void step(SimState state) {
         PSHBEnvironment eState = (PSHBEnvironment) state; //Downcasting the PSHB Environment; Downcasting involves converting a superclass object to its subclass type.
         currentStep = eState.schedule.getSteps(); //get the current steps
-        System.out.println("========Agent " + this.pshbAgentID + " has started current step = " + currentStep +"==========="); //debugging
+//        System.out.println("========Agent " + this.pshbAgentID + " has started current step = " + currentStep +"==========="); //debugging
         eState.debugWriter.addToFile("========Agent " + this.pshbAgentID + " has started current step = " + currentStep +"==========="); //log current step
         this.currentTempGrid = (DoubleGrid2D) eState.weeklyTempGrids[eState.currentWeek].getGrid(); //get current temperature map
         this.currentTemp = this.currentTempGrid.get(this.tempGridX, this.tempGridY); //obtain current temperature from current temp map based on the locations
@@ -175,17 +176,17 @@ public class PSHBAgent implements Steppable {
                 state.debugWriter.addToFile("this agent ID = " + this.pshbAgentID + "    died in " + this.pshbStage);
                 state.numDeathInLARVA ++; //death count in LARVA stage increased by one
                 state.numDeath ++; //death count increased by one
-                this.actionExecuted = "finish development, but preovi randomly death";
+                this.actionExecuted = "finish development but preovi randomly death";
                 death(state); //execute the death method
             } else { //this agent doesn't die in the PREOVI stage
                 if(state.random.nextBoolean(state.mpProbMate)){ //when the agent is mated==true
                     this.pshbMated = true; //state this agent is mated
                     this.pshbStage = Stage.ADULTDISP; //this agent is ready to move on to the DISP stage
-                    this.actionExecuted = "finish development, ready for ADULTDISP, mated";
+                    this.actionExecuted = "finish development ready for ADULTDISP and mated";
                 } else { //what if the agent in the PREOVI stage but not mated?
                     this.pshbMated = false; //this agent is unmated, but still can reproduce
                     this.pshbStage = Stage.ADULTDISP; //still get into next stage
-                    this.actionExecuted = "finish development, ready for ADULTDISP, unmated";
+                    this.actionExecuted = "finish development ready for ADULTDISP and unmated";
                 }
             }
         }
@@ -209,7 +210,7 @@ public class PSHBAgent implements Steppable {
             } else { //the cell is not available
                 dispersal(state); //dispersal anyway
                 this.pshbStage = Stage.ADULTCOL;
-                this.actionExecuted = "want to stay, but dispersed due to poor veg quality and ready for ADULTCOL";
+                this.actionExecuted = "want to stay but dispersed due to poor veg quality and ready for ADULTCOL";
             }
         } else { // not want to stay, dispersal anyway
             this.actionExecuted = "not stay, do dispersal";
@@ -451,14 +452,14 @@ public class PSHBAgent implements Steppable {
         double coordX_newborn = parent.longitudeX; //define the newborn's x location as parents'
         double coordY_newborn = parent.latitudeY; //define the newborn's y location as parents'
         this.pshbSpawn = Calculation.getPoisson(state.mpPshbSpawn); //everytime will be different?
-        System.out.println("number of eggs produced: " + this.pshbSpawn);
         if(this.pshbSpawn ==0) {
             return;
         }
         for(int i=0; i< parent.pshbSpawn; i++) { //loop for all the offspring
             state.pshbAgentID ++; //define an unique ID for the newborn
             PSHBAgent a = new PSHBAgent(state, coordX_newborn, coordY_newborn, state.pshbAgentID, Stage.LARVA); //create a newborn
-            a.event = state.schedule.scheduleRepeating(a);
+            double nextTick = state.schedule.getTime() + 1;
+            a.event = state.schedule.scheduleRepeating(nextTick, 1, a);
             state.agentDevlopGrid.setObjectLocation(a,a.tempGridX,a.tempGridY);
             System.out.println("pshbAgentID = " + a.pshbAgentID + "is a newborn!!"); //print this newborn in the console
             state.debugWriter.addToFile("pshbAgentID = " + a.pshbAgentID + "is a newborn!!");

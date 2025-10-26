@@ -26,7 +26,7 @@ public class OutputWriter {
                 System.out.println("File already exists.");
             }
         } catch (IOException e) {
-            System.out.println("An error occurred.");
+            System.out.println("An error occurred when creating the file.");
             e.printStackTrace();
         }
     }
@@ -48,7 +48,7 @@ public class OutputWriter {
         catch (IOException e) {
 
             // Display message when exception occurs
-            System.out.println("exception occurred" + e);
+            System.out.println("exception occurred when addToFile" + e);
         }
     }
 
