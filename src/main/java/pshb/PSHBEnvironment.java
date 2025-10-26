@@ -31,6 +31,8 @@ public class PSHBEnvironment extends SimState {
         System.setProperty("com.sun.media.imageio.disableCodecLib", "true");
         System.setProperty("org.geotools.coverage.grid.io.imageio.MaskOverviewProvider.spi.disable", "true");
         System.setProperty("org.geotools.coverage.grid.io.imageio.mask.overviews.enabled", "false");
+
+        
     }
     Path currentRelativePath = Paths.get("");
     String projectPath = currentRelativePath.toAbsolutePath().toString();
@@ -163,7 +165,7 @@ public class PSHBEnvironment extends SimState {
         }
         //(11)initiate observer
         PSHBObserver observer = new PSHBObserver();
-        schedule.scheduleRepeating(observer);
+        schedule.scheduleRepeating(Schedule.EPOCH, 2, observer);
         System.out.println("--------------END of the Start Step----------------");
     }
 
@@ -213,11 +215,11 @@ public class PSHBEnvironment extends SimState {
         tiffRasterHost = covPrHost.getRenderedImage().getData();
         tiffRasterRepr = covPrRepr.getRenderedImage().getData();
         // get x, y bounds
-        System.out.println("Raster Host bounds = " + tiffRasterHost.getBounds());
-        System.out.println("Raster Repr bounds = " + tiffRasterRepr.getBounds());
+//        System.out.println("Raster Host bounds = " + tiffRasterHost.getBounds());
+//        System.out.println("Raster Repr bounds = " + tiffRasterRepr.getBounds());
         // get lon, lat bounds (longitude supplied first)
-        System.out.println(covPrHost.getEnvelope());
-        System.out.println(covPrRepr.getEnvelope());
+//        System.out.println(covPrHost.getEnvelope());
+//        System.out.println(covPrRepr.getEnvelope());
         //making use of the coordinate reference system
         crsPrHost = covPrHost.getCoordinateReferenceSystem2D();
         crsPrRepr = covPrRepr.getCoordinateReferenceSystem2D();
@@ -251,7 +253,7 @@ public class PSHBEnvironment extends SimState {
             int nAgentsAtLocation = info.getNumOfPSHBAgents();
             for(int j=0; j<nAgentsAtLocation; j++){
                 PSHBAgent a = makeAgent(inputCoordX, inputCoordY, Stage.LARVA);
-                a.event = schedule.scheduleRepeating(a);
+                a.event = schedule.scheduleRepeating(Schedule.EPOCH, 1, a);
                 agentDevlopGrid.setObjectLocation(a, tempX, tempY);
             }
         }
@@ -260,7 +262,6 @@ public class PSHBEnvironment extends SimState {
     public PSHBAgent makeAgent(double coordX, double coordY, Stage stage) {
         pshbAgentID++;
         PSHBAgent a = new PSHBAgent(this, coordX, coordY, pshbAgentID, stage);
-        System.out.println("pshbAgentID = " + a.pshbAgentID + "has started his life at step 0");
         a.dateData.put("birthday", this.schedule.getSteps());
         a.locationData.put("lonAtBirth", a.longitudeX);
         a.locationData.put("latAtBirth", a.latitudeY);
