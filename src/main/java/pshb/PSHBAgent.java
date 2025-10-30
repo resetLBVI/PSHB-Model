@@ -213,7 +213,7 @@ public class PSHBAgent implements Steppable {
                 this.actionExecuted = "want to stay but dispersed due to poor veg quality and ready for ADULTCOL";
             }
         } else { // not want to stay, dispersal anyway
-            this.actionExecuted = "not stay, do dispersal";
+            this.actionExecuted = "not stay do dispersal";
             dispersal(state); //execute the dispersal sub-model
 //            this.pshbStage = Stage.ADULTCOL;
         }
