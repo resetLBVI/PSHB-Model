@@ -10,6 +10,7 @@ public class PSHBTimer implements Steppable {
         //update the timer
         eState.updateYear();
         eState.updateWeek();
+        eState.rollToWeekForTempMaps(eState.currentWeek);
         System.out.println("===================================================");
         System.out.println("Update Current week:" + eState.currentWeek);
         System.out.println("Update Current year:" + eState.currentYear);

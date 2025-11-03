@@ -1,21 +1,37 @@
 package pshb;
 
+// Java
+import java.awt.Color;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import javax.imageio.ImageIO;
+
+// MASON
+import sim.field.grid.SparseGrid2D;
+import sim.portrayal.grid.SparseGridPortrayal2D;
+import sim.portrayal.simple.ImagePortrayal2D;
+
+// (optional, depending on your class)
+import sim.display.Display2D;      // if you reference Display2D
+
+import pshb.Utils.OutputWriter;
 import sim.display.Console;
 import sim.display.Controller;
-import sim.display.Display2D;
 import sim.display.GUIState;
 import sim.engine.SimState;
-import sim.portrayal.grid.FastValueGridPortrayal2D;
-import sim.portrayal.grid.SparseGridPortrayal2D;
+import sim.portrayal.SimplePortrayal2D;
 import sim.portrayal.simple.OvalPortrayal2D;
-import sim.util.gui.SimpleColorMap;
 
-import pshb.Utils.ImageIOSetup;
+
 import org.geotools.coverage.grid.io.imageio.MaskOverviewProvider;
+import sim.util.Int2D;
+
 import javax.imageio.spi.IIORegistry;
 
 import javax.swing.*;
-import java.awt.*;
 
 /* #######################################################################################
  * This class includes:
@@ -40,11 +56,16 @@ public class PSHBWorldWithUI extends GUIState {
     }
     Display2D display; //create a display
     JFrame displayFrame; //create a display frame
-    //    GeomVectorFieldPortrayasl vegetationPortrayal = new GeomVectorFieldPortrayal();
-    FastValueGridPortrayal2D temperatureGridPortrayal = new FastValueGridPortrayal2D("temperature grid");
-    FastValueGridPortrayal2D vegGridPortrayal = new FastValueGridPortrayal2D("vegetation grid");
-    SparseGridPortrayal2D PSHBAgentPortrayal = new SparseGridPortrayal2D();
-    //    SparseGridPortrayal2D PSHBGroupPortrayal = new SparseGridPortrayal2D();
+    SparseGridPortrayal2D backgroundPortrayal = new SparseGridPortrayal2D();
+    SparseGridPortrayal2D PSHBAgentPortrayal = new SparseGridPortrayal2D() {
+        @Override
+        public SimplePortrayal2D getPortrayalForObject(Object obj) {
+            PSHBEnvironment eState = (PSHBEnvironment)state;
+            Int2D loc = eState.agentDisplayGrid.getObjectLocation(obj);
+            return new OvalPortrayal2D(Color.BLACK, 2);
+        }
+    };
+
     //Constructor
     public PSHBWorldWithUI(SimState state) { super(state);}
     public PSHBWorldWithUI(){super(new PSHBEnvironment(System.currentTimeMillis()));}
@@ -58,10 +79,7 @@ public class PSHBWorldWithUI extends GUIState {
 
     public void init (Controller controller){
         super.init(controller); //super from GUIState
-        this.display = new Display2D(600, 600, this); //initially create a UI display
-        this.display.attach(this.temperatureGridPortrayal, "temperature grids"); //attach the temperature grids
-        this.display.attach(this.PSHBAgentPortrayal, "PSHBAgents"); // attach the PSHB agents
-//        this.display.attach(this.PSHBGroupPortrayal, "PSHBGroups"); //attach the PSHB groups
+        this.display = new Display2D(800, 800, this); //initially create a UI display
         this.displayFrame = this.display.createFrame(); //create a display frame
         controller.registerFrame(this.displayFrame); //set-up display
         this.displayFrame.setVisible(true); //set-up display
@@ -82,24 +100,72 @@ public class PSHBWorldWithUI extends GUIState {
     }
 
     private void setupPortrayals() {
-        PSHBEnvironment eState = (PSHBEnvironment)state;
-//        temperatureGridPortrayal.setField(eState.tempGrid);
-        temperatureGridPortrayal.setField(eState.basicGrid.getGrid()); //connect the gridField in the environment and UI, get the grids to UI
-        Color color = new Color(0, 0, 255, 0); //blue ,
-        this.temperatureGridPortrayal.setMap(new SimpleColorMap(0, 100, Color.white, color));
+        PSHBEnvironment eState = (PSHBEnvironment) state;
 
-        this.PSHBAgentPortrayal.setField(eState.agentDevlopGrid);
-        this.PSHBAgentPortrayal.setPortrayalForAll(new OvalPortrayal2D(Color.RED, 0.7));
-        //reschedule the display
-        this.display.reset();
-        this.display.setBackdrop(Color.WHITE); //set the color of the background
-        this.display.repaint();
+        // 0) Get load filename
+        String bgFileName;
+        try {
+            bgFileName = OutputWriter.getFileName("/RESET_PSHB_inputData/RESET_model_UI_background.jpg", true);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        Path bgPath = Paths.get(bgFileName).toAbsolutePath();
+        System.out.println("[BG] Using external file path: " + bgPath);
+
+        // Verify presence & readability
+        if (!Files.exists(bgPath)) {
+            throw new RuntimeException("[BG] File does not exist: " + bgPath);
+        }
+        if (!Files.isRegularFile(bgPath) || !Files.isReadable(bgPath)) {
+            throw new RuntimeException("[BG] File not readable: " + bgPath);
+        }
+
+        // 1) Load the background image from classpath and fully decode it
+        // Decode image fully (avoid lazy ImageIcon)
+        final BufferedImage bg;
+        try {
+            bg = ImageIO.read(bgPath.toFile());
+            if (bg == null) {
+                throw new IOException("ImageIO.read returned null (unsupported format?)");
+            }
+        } catch (IOException ex) {
+            throw new RuntimeException("[BG] Failed to decode image at " + bgPath, ex);
+        }
+        System.out.println("[BG] Loaded OK: " + bg.getWidth() + "x" + bg.getHeight());
+
+        // 2) Create a 1x1 grid and put a single token object in it
+        SparseGrid2D bgGrid = new SparseGrid2D(1, 1);
+        Object token = new Object();
+        bgGrid.setObjectLocation(token, 0, 0);
+
+        // 3) Tell the background portrayal about the field AND how to draw that token
+        backgroundPortrayal.setField(bgGrid);
+        // ImagePortrayal2D(image, scale). With a 1x1 grid, the single cell fills the display.
+        backgroundPortrayal.setPortrayalForAll(new ImagePortrayal2D(bg, 5.0));
+
+        // 4) Agents layer
+        PSHBAgentPortrayal.setField(eState.agentDisplayGrid);
+
+        // 5) Attach layers in order: background first, then agents
+        display.detachAll();
+        display.attach(backgroundPortrayal, "Image Layer", true); // 'true' = behind others
+        display.attach(PSHBAgentPortrayal, "PSHB Agents");
+
+        // 6) Misc display tweaks
+        display.setClipping(false);
+        display.setScale(0.2); // adjust to taste
+        display.setBackdrop(Color.WHITE); // backdrop is drawn BEFORE layers; won't cover the image
+
+        // 7) Refresh
+        display.reset();
+        display.repaint();
+
+        System.out.println("Number of Agents in UI: " + eState.agentDisplayGrid.allObjects.numObjs);
     }
 
 
     public static void main(String[] args) {
-        // Force registration of JAI ImageIO service providers
-        ImageIOSetup.registerJAIImageIOSpis();
 
         PSHBWorldWithUI worldGUI = new PSHBWorldWithUI();
         Console console = new Console(worldGUI);

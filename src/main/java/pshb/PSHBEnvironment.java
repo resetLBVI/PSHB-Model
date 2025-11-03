@@ -1,23 +1,17 @@
 package pshb;
 
-import com.vividsolutions.jts.geom.Envelope;
+import org.locationtech.jts.geom.Envelope;
 import org.geotools.api.referencing.crs.CoordinateReferenceSystem;
 import org.geotools.api.referencing.operation.TransformException;
-import org.geotools.coverage.grid.GridCoverage2D;
 import org.geotools.coverage.grid.GridGeometry2D;
-import org.geotools.gce.geotiff.GeoTiffReader;
 import pshb.Utils.*;
 import sim.engine.Schedule;
 import sim.engine.SimState;
-import sim.field.geo.GeomGridField;
-import sim.field.grid.DoubleGrid2D;
 import sim.field.grid.SparseGrid2D;
-import sim.io.geo.ArcInfoASCGridImporter;
 
-import java.awt.image.Raster;
+import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
 import java.util.*;
 import java.io.File;
 import java.nio.file.Path;
@@ -37,11 +31,6 @@ public class PSHBEnvironment extends SimState {
     Path currentRelativePath = Paths.get("");
     String projectPath = currentRelativePath.toAbsolutePath().toString();
     //input and output files path
-//    public String inputFilePath = "/Users/lin1789/Desktop/RESET_PSHB_inputData/";
-//    public String logFile = "/Users/lin1789/Desktop/test_log.txt";
-//    public String outputFile = "/Users/lin1789/Desktop/test_output.csv";
-//    public String popSummaryFile = "/Users/lin1789/Desktop/test_popSummary.csv";
-//    public String impactFile = "/Users/lin1789/Desktop/test_impact.csv";
     public String debugFile = "RESET_PSHB_debug.txt";
     public String logFile = "RESET_PSHB_log.csv";
     public String agentSummaryFile = "RESET_PSHB_agentSummary.csv";
@@ -53,14 +42,26 @@ public class PSHBEnvironment extends SimState {
     OutputWriter popSummaryWriter;
     OutputWriter impactWriter;
 
-    //Environment parameters are global
-    GeomGridField basicGrid = new GeomGridField(); //this is a basic grid shown in the UI (unnecessary)
-    GeomGridField[] weeklyTempGrids; // there are 52 temperature grid maps, read them into a list
-    DoubleGrid2D tempGrid; //current temperature grid
-    int weekOfTemp = 52; //there are 52 temperature maps
-    public Envelope globalMBR;
-    public SparseGrid2D agentDevlopGrid; //this raster map is for agent's development, which is based on the temperature maps
-    SparseGrid2D agentColonizedGrid; // this raster map is for agent's colonization and reproduction, which is based on the vegetation maps
+    // --- temperature service ---
+    public WeeklyTempService tempService;
+    // (optional) cache per-week metadata so agents don’t call getters repeatedly
+    public org.geotools.api.referencing.crs.CoordinateReferenceSystem weekCRS;
+    public org.geotools.coverage.grid.GridGeometry2D             weekGG;
+
+    //veg maps
+    CoordinateReferenceSystem crsPrHost;
+    CoordinateReferenceSystem crsPrRepr;
+    GridGeometry2D ggHost;
+    GridGeometry2D ggRepr;
+    LazyVegGeoTiff vegHost; //primary Host raster
+    LazyVegGeoTiff vegRepr; //primary reproduction raster
+    public SparseGrid2D agentDevelopGrid; //this raster map is for agent's development, which is based on the temperature maps
+    public SparseGrid2D agentColonizedGrid; // this raster map is for agent's colonization and reproduction, which is based on the vegetation maps
+    public SparseGrid2D agentDisplayGrid;
+//    public ObjectGrid2D vegCellGrid;
+    int displayWidth = 100;
+    int displayHeight = 100;
+    //transformation
     public double xllcornerTemp = -176101.065660700784 + 1500;
     public double yllcornerTemp = -605553.288401709870 + 1500;
     public int tempCellSize = 3000;
@@ -70,13 +71,7 @@ public class PSHBEnvironment extends SimState {
     double yllcornerVeg = -695325 + 15;
     int vegCellSize = 30;
     int nRowsVeg = 23518;
-    //veg maps
-    CoordinateReferenceSystem crsPrHost;
-    CoordinateReferenceSystem crsPrRepr;
-    GridGeometry2D ggPrHost;
-    GridGeometry2D ggPrRepr;
-    Raster tiffRasterHost;
-    Raster tiffRasterRepr;
+
 
     //Agent state variables
     public int pshbAgentID = 0;
@@ -114,6 +109,7 @@ public class PSHBEnvironment extends SimState {
 
     public void start() {
         super.start();
+
         try {
             // (1) create debugFile
             String[] debugHeader = {};
@@ -143,18 +139,38 @@ public class PSHBEnvironment extends SimState {
             String impactFile = OutputWriter.getFileName(this.impactFile, false);
             this.impactWriter = new OutputWriter(impactFile);
             this.impactWriter.createFile(impactDataHeader);
-            //(6) import weekly temperature maps
-            importWeeklyRasterMap();
-            // (7) import vegetation maps
-            importTiffVegRasterMaps();
-            //(8) Initiate other fields
-            this.agentDevlopGrid = new SparseGrid2D(this.basicGrid.getGridWidth(), this.basicGrid.getGridHeight());
-            this.agentColonizedGrid = new SparseGrid2D(this.basicGrid.getGridWidth(), this.basicGrid.getGridHeight());
-
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        //(9) initiate teimer just to update the time
+        //(6) import weekly temperature maps
+        // (6-1) init the lazy service (keeps no rasters in memory)
+        tempService = new WeeklyTempService(52);
+
+        // (6-2) set initial week metadata cache (agents can read these fields)
+        try {
+            weekCRS = tempService.getCRS(currentWeek +1);
+            weekGG  = tempService.getGridGeometry(currentWeek +1);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to init WeeklyTempService metadata", e);
+        }
+        for (Iterator<ImageReader> it = ImageIO.getImageReadersByFormatName("tiff"); it.hasNext(); ) {
+            var r = it.next();
+            System.out.println(" - " + r.getClass().getName());
+        }
+
+        try {
+            // (7) import vegetation maps
+            importTiffVegRasterMaps();
+            //(8) Initiate other fields
+            this.agentDisplayGrid = new SparseGrid2D(displayWidth, displayHeight);
+            this.agentDevelopGrid = new SparseGrid2D(tempService.getWidth(1), tempService.getHeight(1));
+            this.agentColonizedGrid = new SparseGrid2D(vegHost.getWidth(), vegHost.getHeight());
+
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
+        //(9) initiate timer just to update the time
         PSHBTimer systemTimer = new PSHBTimer();
         schedule.scheduleRepeating(Schedule.EPOCH, 0, systemTimer);
         //(10)make agents
@@ -169,69 +185,108 @@ public class PSHBEnvironment extends SimState {
         System.out.println("--------------END of the Start Step----------------");
     }
 
-    public void importWeeklyRasterMap() {
-        try {
-            String basicGridFileName = OutputWriter.getFileName("/RESET_PSHB_inputData/TempGridReset_week_1.asc", true);
-            System.out.println("reading raster map"); //import 52 maps
-            File initialFile = new File(basicGridFileName);
-            InputStream inputStream = Files.newInputStream(initialFile.toPath());
+//    public void importWeeklyRasterMap() {
+//        try {
+//            String basicGridFileName = OutputWriter.getFileName("/RESET_PSHB_inputData/TempGridReset_week_1.asc", true);
+//            System.out.println("reading raster map");
+//            File initialFile = new File(basicGridFileName);
+//            InputStream inputStream = Files.newInputStream(initialFile.toPath());
+//            System.out.println("fileName = " + basicGridFileName);
+//            ArcInfoASCGridImporter.read(inputStream, GeomGridField.GridDataType.DOUBLE, this.basicGrid);
+//            this.weeklyTempGrids = new GeomGridField[weekOfTemp];
+//            for(int i=0; i<weekOfTemp; i++){
+//                this.weeklyTempGrids[i] = new GeomGridField();
+//                String weeklyTempFileName = OutputWriter.getFileName("/RESET_PSHB_inputData/" + String.format("TempGridReset_week_%d.asc", i+1), true);
+//                File continueFile = new File(weeklyTempFileName);
+//                inputStream = Files.newInputStream(continueFile.toPath());
+//                System.out.println("fileName = " + String.format("TempGridReset_week_%d.asc", i+1));
+//                ArcInfoASCGridImporter.read(inputStream, GeomGridField.GridDataType.DOUBLE, this.weeklyTempGrids[i]);
+//            }
+//            this.tempGrid = (DoubleGrid2D) this.weeklyTempGrids[0].getGrid();
+////            this.tempGrid = (SparseGrid2D) this.weeklyTempGrids[0].getGrid();
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//        }
+//        globalMBR = this.basicGrid.getMBR();
+//        this.basicGrid.setMBR(globalMBR);
+//    }
 
-            System.out.println("fileName = " + basicGridFileName);
-            ArcInfoASCGridImporter.read(inputStream, GeomGridField.GridDataType.DOUBLE, this.basicGrid);
-            this.weeklyTempGrids = new GeomGridField[weekOfTemp];
-            for(int i=0; i<weekOfTemp; i++){
-                this.weeklyTempGrids[i] = new GeomGridField();
-                String weeklyTempFileName = OutputWriter.getFileName("/RESET_PSHB_inputData/" + String.format("TempGridReset_week_%d.asc", i+1), true);
-                File continueFile = new File(weeklyTempFileName);
-                inputStream = Files.newInputStream(continueFile.toPath());
-                System.out.println("fileName = " + String.format("TempGridReset_week_%d.asc", i+1));
-                ArcInfoASCGridImporter.read(inputStream, GeomGridField.GridDataType.DOUBLE, this.weeklyTempGrids[i]);
-            }
-            this.tempGrid = (DoubleGrid2D) this.weeklyTempGrids[0].getGrid();
-//            this.tempGrid = (SparseGrid2D) this.weeklyTempGrids[0].getGrid();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        globalMBR = this.basicGrid.getMBR();
-        this.basicGrid.setMBR(globalMBR);
-    }
+//    public void importTiffVegRasterMaps() throws IOException {
+//        String hostPrFileName = OutputWriter.getFileName("RESET_PSHB_inputData/VegRaster_PrHost_20240730.tif", true);
+//        String reprPrFileName = OutputWriter.getFileName("RESET_PSHB_inputData/VegRaster_PrRepr_20240730.tif", true);
+//        hostPrFileName = hostPrFileName.replace("%20", " ");
+//        reprPrFileName = reprPrFileName.replace("%20", " ");
+//        File tiffVegRaster_PrHost = new File(hostPrFileName);
+//        File tiffVegRaster_PrRepr = new File(reprPrFileName);
+//        System.out.println("Trying to read: " + tiffVegRaster_PrHost.getAbsolutePath());
+//        System.out.println("Exists? " + tiffVegRaster_PrHost.exists());
+//        System.out.println("Can read? " + tiffVegRaster_PrHost.canRead());
+//
+//        GeoTiffReader reader_PrHost = new GeoTiffReader(tiffVegRaster_PrHost);
+//        GeoTiffReader reader_PrRepr = new GeoTiffReader(tiffVegRaster_PrRepr);
+//        GridCoverage2D covPrHost = reader_PrHost.read(null);
+//        GridCoverage2D covPrRepr = reader_PrRepr.read(null);
+//        tiffRasterHost = covPrHost.getRenderedImage().getData();
+//        tiffRasterRepr = covPrRepr.getRenderedImage().getData();
+//        // get x, y bounds
+////        System.out.println("Raster Host bounds = " + tiffRasterHost.getBounds());
+////        System.out.println("Raster Repr bounds = " + tiffRasterRepr.getBounds());
+//        // get lon, lat bounds (longitude supplied first)
+////        System.out.println(covPrHost.getEnvelope());
+////        System.out.println(covPrRepr.getEnvelope());
+//        //making use of the coordinate reference system
+//        crsPrHost = covPrHost.getCoordinateReferenceSystem2D();
+//        crsPrRepr = covPrRepr.getCoordinateReferenceSystem2D();
+//        //Returns a math transform for the two dimensional part for conversion from world to grid coordinates.
+//        ggHost = covPrHost.getGridGeometry();
+//        ggRepr = covPrRepr.getGridGeometry();
+//    }
 
-    //ADD
-    public void importTiffVegRasterMaps() throws IOException {
-        String hostPrFileName = OutputWriter.getFileName("RESET_PSHB_inputData/VegRaster_PrHost_20240730.tif", true);
-        String reprPrFileName = OutputWriter.getFileName("RESET_PSHB_inputData/VegRaster_PrRepr_20240730.tif", true);
-        hostPrFileName = hostPrFileName.replace("%20", " ");
-        reprPrFileName = reprPrFileName.replace("%20", " ");
+    public void importTiffVegRasterMaps() throws Exception {
+        String hostPrFileName = OutputWriter.getFileName("RESET_PSHB_inputData/VegRaster_PrHost_20240730.tif", true).replace("%20", " ");
+        String reprPrFileName = OutputWriter.getFileName("RESET_PSHB_inputData/VegRaster_PrRepr_20240730.tif", true).replace("%20", " ");
+
         File tiffVegRaster_PrHost = new File(hostPrFileName);
         File tiffVegRaster_PrRepr = new File(reprPrFileName);
+
         System.out.println("Trying to read: " + tiffVegRaster_PrHost.getAbsolutePath());
         System.out.println("Exists? " + tiffVegRaster_PrHost.exists());
         System.out.println("Can read? " + tiffVegRaster_PrHost.canRead());
 
-        GeoTiffReader reader_PrHost = new GeoTiffReader(tiffVegRaster_PrHost);
-        GeoTiffReader reader_PrRepr = new GeoTiffReader(tiffVegRaster_PrRepr);
-        GridCoverage2D covPrHost = reader_PrHost.read(null);
-        GridCoverage2D covPrRepr = reader_PrRepr.read(null);
-        tiffRasterHost = covPrHost.getRenderedImage().getData();
-        tiffRasterRepr = covPrRepr.getRenderedImage().getData();
-        // get x, y bounds
-//        System.out.println("Raster Host bounds = " + tiffRasterHost.getBounds());
-//        System.out.println("Raster Repr bounds = " + tiffRasterRepr.getBounds());
-        // get lon, lat bounds (longitude supplied first)
-//        System.out.println(covPrHost.getEnvelope());
-//        System.out.println(covPrRepr.getEnvelope());
-        //making use of the coordinate reference system
-        crsPrHost = covPrHost.getCoordinateReferenceSystem2D();
-        crsPrRepr = covPrRepr.getCoordinateReferenceSystem2D();
-        //Returns a math transform for the two dimensional part for conversion from world to grid coordinates.
-        ggPrHost = covPrHost.getGridGeometry();
-        ggPrRepr = covPrRepr.getGridGeometry();
+        // IMPORTANT: we do NOT call getRenderedImage().getData() anywhere.
+        vegHost = new LazyVegGeoTiff(tiffVegRaster_PrHost); //primary host raster
+        vegRepr = new LazyVegGeoTiff(tiffVegRaster_PrRepr); //primary reproduction raster
 
+        // We need CRS or grid geometry for other utilities:
+        this.crsPrHost = vegHost.getCRS();
+        this.crsPrRepr = vegRepr.getCRS();
+        ggHost = vegHost.getGridGeometry();  // we need GridGeometry2D for coordinate transformation
+        ggRepr = vegRepr.getGridGeometry();
     }
+
     //update week and year
     public void updateWeek() {this.currentWeek = (int)(schedule.getSteps() % 52); }
 
     public void updateYear() {this.currentYear = (int)(schedule.getSteps() / 52); }
+
+    /** Call when your sim advances to a new week for temperature maps. */
+    public void rollToWeekForTempMaps(int newWeek) {
+        currentWeek = newWeek;
+        try {
+            weekCRS = tempService.getCRS(currentWeek + 1);
+            weekGG  = tempService.getGridGeometry(currentWeek + 1);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to load metadata for week " + currentWeek + 1, e);
+        }
+    }
+
+    @Override
+    public void finish() {
+        super.finish();
+        if (tempService != null) {
+            try { tempService.close(); } catch (Exception ignored) {}
+        }
+    }
 
 
     /*
@@ -248,13 +303,13 @@ public class PSHBEnvironment extends SimState {
             InfoIdentifier info = initialInfo.get(i);
             double inputCoordX = info.getInputX();
             double inputCoordY = info.getInputY();
-            int tempX = CoordinateConverter.longitudeXToGridX(inputCoordX, xllcornerTemp, tempCellSize); //the x location on the temp map
-            int tempY = CoordinateConverter.latitudeYToGridY(inputCoordY, yllcornerTemp, tempCellSize, nRowsTemp); //the y location on the temp map
+//            int tempX = CoordinateConverter.longitudeXToGridX(inputCoordX, xllcornerTemp, tempCellSize); //the x location on the temp map
+//            int tempY = CoordinateConverter.latitudeYToGridY(inputCoordY, yllcornerTemp, tempCellSize, nRowsTemp); //the y location on the temp map
             int nAgentsAtLocation = info.getNumOfPSHBAgents();
             for(int j=0; j<nAgentsAtLocation; j++){
                 PSHBAgent a = makeAgent(inputCoordX, inputCoordY, Stage.LARVA);
                 a.event = schedule.scheduleRepeating(Schedule.EPOCH, 1, a);
-                agentDevlopGrid.setObjectLocation(a, tempX, tempY);
+                agentDisplayGrid.setObjectLocation(a, a.displayLocation);
             }
         }
     }
@@ -276,32 +331,31 @@ public class PSHBEnvironment extends SimState {
      */
     //Get the patch ID
     public int getPatchID(PSHBEnvironment state, int vegGridX, int vegGridY) {
-        int[] hostRasterData = new int[1];
+        double hostRasterValue = 0;
         int patchID = 0;
-        state.tiffRasterHost.getPixel(vegGridX, vegGridY, hostRasterData);
-        if(hostRasterData[0] > 100000) { //not a patch
+        hostRasterValue = vegHost.valueAtGrid(vegGridX, vegGridY);
+        if(hostRasterValue > 100000) { //not a patch
             return patchID = 0;
         } else { //it's a patch, return the patchID
-            patchID = hostRasterData[0];
+            patchID = (int) hostRasterValue;
             return patchID;
         }
     }
     //Get probability of hosting a cell
     public double getVegMapPrHost(PSHBEnvironment state, double coordX, double coordY) throws TransformException {
-        // sample tiff data with at pixel coordinate(get Values)
-        int[] hostRasterData = new int[1];
+        double hostRasterValue = 0;
         double hostProb = 0;
         int posGridX; //grid x in veg map
         int posGridY; //grid y in veg map
         try {
-            posGridX = CoordinateConverter.coordToGrid(state.crsPrHost, state.ggPrHost, coordX, coordY)[0]; //convert lon to gridx
-            posGridY = CoordinateConverter.coordToGrid(state.crsPrHost, state.ggPrHost, coordX, coordY)[1]; //convert lat to gridy
+            posGridX = CoordinateConverter.coordToGrid(state.crsPrHost, state.ggHost, coordX, coordY)[0]; //convert lon to gridx
+            posGridY = CoordinateConverter.coordToGrid(state.crsPrHost, state.ggHost, coordX, coordY)[1]; //convert lat to gridy
         } catch (TransformException e) {
             throw new RuntimeException(e);
         }
-        state.tiffRasterHost.getPixel(posGridX, posGridY, hostRasterData);
-        if(hostRasterData[0] > 100000) {
-            hostProb = (hostRasterData[0] - 100000) / 100 ;
+        hostRasterValue = vegHost.valueAtGrid(posGridX, posGridY);
+        if(hostRasterValue > 100000) {
+            hostProb = (hostRasterValue - 100000) / 100 ;
         } else {
             hostProb = random.nextDouble(); //So far, Use a random number because we haven't had veg data
         }
@@ -309,20 +363,19 @@ public class PSHBEnvironment extends SimState {
     }
     //ADD
     public double getVegMapPrRepr(PSHBEnvironment state, double coordX, double coordY) throws TransformException{
-        // sample tiff data with at pixel coordinate(get Values)
-        double[] reprRasterData = new double[1];
+        double pixelValue = 0;
         double reprProb = 0;
         int posGridX;
         int posGridY;
         try {
-            posGridX = CoordinateConverter.coordToGrid(state.crsPrHost, state.ggPrHost, coordX, coordY)[0]; //convert lon to gridx
-            posGridY = CoordinateConverter.coordToGrid(state.crsPrHost, state.ggPrHost, coordX, coordY)[1]; //convert lat to gridy
+            posGridX = CoordinateConverter.coordToGrid(state.crsPrHost, state.ggRepr, coordX, coordY)[0]; //convert lon to gridx
+            posGridY = CoordinateConverter.coordToGrid(state.crsPrHost, state.ggRepr, coordX, coordY)[1]; //convert lat to gridy
         } catch (TransformException e) {
             throw new RuntimeException(e);
         }
-        state.tiffRasterRepr.getPixel(posGridX, posGridY, reprRasterData);
-        if(reprRasterData[0] > 100000) {
-            reprProb = (reprRasterData[0] - 100000) / 100 ;
+        pixelValue = vegRepr.valueAtGrid(posGridX, posGridY);
+        if(pixelValue > 100000) {
+            reprProb = (pixelValue - 100000) / 100 ;
         } else {
             reprProb = random.nextDouble(); //So far, Use a random number because we haven't had veg data
         }
