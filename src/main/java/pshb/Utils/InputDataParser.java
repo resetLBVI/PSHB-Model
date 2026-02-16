@@ -10,7 +10,10 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 
-
+/**
+ * InputDataParser is a utility class that reads a CSV input file and parses each row into InfoIdentifier objects,
+ * returning a structured map of initial agent locations and counts for model initialization.
+ */
 public class InputDataParser {
     String fileDirectory;
     Path path;

@@ -11,6 +11,7 @@ import javax.imageio.ImageIO;
 
 // MASON
 import sim.field.grid.SparseGrid2D;
+import sim.portrayal.grid.FastValueGridPortrayal2D;
 import sim.portrayal.grid.SparseGridPortrayal2D;
 import sim.portrayal.simple.ImagePortrayal2D;
 
@@ -56,13 +57,14 @@ public class PSHBWorldWithUI extends GUIState {
     }
     Display2D display; //create a display
     JFrame displayFrame; //create a display frame
+//    FastValueGridPortrayal2D temperatureGridPortrayal2D = new FastValueGridPortrayal2D("temperature grid");
     SparseGridPortrayal2D backgroundPortrayal = new SparseGridPortrayal2D();
     SparseGridPortrayal2D PSHBAgentPortrayal = new SparseGridPortrayal2D() {
         @Override
         public SimplePortrayal2D getPortrayalForObject(Object obj) {
             PSHBEnvironment eState = (PSHBEnvironment)state;
             Int2D loc = eState.agentDisplayGrid.getObjectLocation(obj);
-            return new OvalPortrayal2D(Color.BLACK, 2);
+            return new OvalPortrayal2D(Color.BLACK, 0.8);
         }
     };
 
@@ -135,14 +137,19 @@ public class PSHBWorldWithUI extends GUIState {
         System.out.println("[BG] Loaded OK: " + bg.getWidth() + "x" + bg.getHeight());
 
         // 2) Create a 1x1 grid and put a single token object in it
-        SparseGrid2D bgGrid = new SparseGrid2D(1, 1);
+        int W = eState.agentDisplayGrid.getWidth();
+        int H = eState.agentDisplayGrid.getHeight();
+
+        SparseGrid2D bgGrid = new SparseGrid2D(W, H);
         Object token = new Object();
-        bgGrid.setObjectLocation(token, 0, 0);
+        // Put token at the center so the image expands around it
+        bgGrid.setObjectLocation(token, W / 2, H / 2);
 
         // 3) Tell the background portrayal about the field AND how to draw that token
         backgroundPortrayal.setField(bgGrid);
-        // ImagePortrayal2D(image, scale). With a 1x1 grid, the single cell fills the display.
-        backgroundPortrayal.setPortrayalForAll(new ImagePortrayal2D(bg, 5.0));
+        // IMPORTANT: scale in ImagePortrayal2D is relative to a *cell*.
+        // Using W makes the image span ~the full width of the grid.
+        backgroundPortrayal.setPortrayalForAll(new ImagePortrayal2D(bg, (double) W));
 
         // 4) Agents layer
         PSHBAgentPortrayal.setField(eState.agentDisplayGrid);
@@ -154,7 +161,7 @@ public class PSHBWorldWithUI extends GUIState {
 
         // 6) Misc display tweaks
         display.setClipping(false);
-        display.setScale(0.2); // adjust to taste
+        display.setScale(1.0); // adjust to taste
         display.setBackdrop(Color.WHITE); // backdrop is drawn BEFORE layers; won't cover the image
 
         // 7) Refresh

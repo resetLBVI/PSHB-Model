@@ -6,6 +6,10 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.net.URISyntaxException;
 
+/**
+ * OutputWriter is a file management utility class that handles creating, locating, and appending to output files,
+ * supporting both IDE and JAR execution environments for consistent model input/output operations.
+ */
 public class OutputWriter {
     public String outputFilePath;
 

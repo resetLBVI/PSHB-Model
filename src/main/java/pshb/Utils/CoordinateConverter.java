@@ -8,6 +8,11 @@ import org.geotools.coverage.grid.GridGeometry2D;
 import org.geotools.geometry.Position2D;
 import org.geotools.geometry.jts.ReferencedEnvelope;
 
+/**
+ * CoordinateConverter is a spatial utility class that provides methods for converting between geographic
+ * coordinates (longitude/latitude) and raster grid coordinates using either manual calculations or
+ * GeoTools-based transformations.
+ */
 public class CoordinateConverter {
 
     public static int longitudeXToGridX(Double longitudeX, double xllcorner, int cellSize){

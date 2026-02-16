@@ -29,6 +29,9 @@ import javax.imageio.spi.ImageReaderSpi;
 
 
 /**
+ * WeeklyTempService is a lazy, tile-based GeoTIFF temperature access service that provides week-specific
+ * raster metadata and per-cell temperature sampling with an LRU cache to minimize memory use and open-file
+ * overhead.
  * Weekly temperature sampler for GeoTIFFs named:
  *   /RESET_PSHB_inputData/TempGridReset_week_%d.tif
  *
