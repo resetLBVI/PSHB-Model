@@ -107,7 +107,7 @@ public class PSHBWorldWithUI extends GUIState {
         // 0) Get load filename
         String bgFileName;
         try {
-            bgFileName = OutputWriter.getFileName("/RESET_PSHB_inputData/RESET_model_UI_background.jpg", true);
+            bgFileName = OutputWriter.getFileName("/RESET_PSHB_inputData/RESET_model_UI_background-2.jpg", true);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
