@@ -15,6 +15,10 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Objects;
 
+/**
+ * LazyVegGeoTiff is a memory-efficient raster utility class that lazily loads GeoTIFF vegetation data and
+ * provides tile-based pixel sampling and spatial metadata access without loading the entire raster into memory.
+ */
 public final class LazyVegGeoTiff {
     private final File file;
     private final GeoTiffReader reader;

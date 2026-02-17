@@ -1,6 +1,8 @@
 package pshb.Utils;
 
 /**
+ * InfoIdentifier is an immutable data container class that stores the geographic coordinates and initial number
+ * of PSHB agents associated with a specific input location.
  * The InfoIdentifier class is a simple data container used to store and organize parsed input information from the input file.
  * Specifically, it holds: (1) A longitude coordinate (inputX) (2) A latitude coordinate (inputY)
  * (3) The number of PSHB agents (numOfPSHBAgents) associated with that location
@@ -11,9 +13,6 @@ public class InfoIdentifier {
     private final Double inputX;
     private final Double inputY;
     private final Integer numOfPSHBAgents;
-
-
-
 
     public InfoIdentifier(Double inputX, Double inputY, Integer numOfPSHBAgents) {
         this.inputX = inputX; //longitude first

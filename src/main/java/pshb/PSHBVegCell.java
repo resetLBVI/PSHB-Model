@@ -40,7 +40,7 @@ PSHBVegCell implements Steppable {
     @Override
     public void step(SimState state) {
         PSHBEnvironment eState = (PSHBEnvironment) state;
-        if(numColonizedAgents >= 5 && eState.currentWeek ==1) { //update in the second week of the year
+        if(numColonizedAgents >= 5 && eState.currentWeek ==1) { //update in the second week of the year (Section 3.3)
             //collect impact data when a cell is dead - collect "year" "vegGridX" "vegGridY" "patchID"
             numColonizedAgents = 0; //reset
             this.deadVegetation = true;

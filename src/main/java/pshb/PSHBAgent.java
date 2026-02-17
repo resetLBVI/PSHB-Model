@@ -11,6 +11,7 @@ import sim.field.grid.DoubleGrid2D;
 import sim.util.Bag;
 import sim.util.Int2D;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -110,10 +111,7 @@ public class PSHBAgent implements Steppable {
     public void step(SimState state) {
         PSHBEnvironment eState = (PSHBEnvironment) state; //Downcasting the PSHB Environment; Downcasting involves converting a superclass object to its subclass type.
         currentStep = eState.schedule.getSteps(); //get the current steps
-//        System.out.println("========Agent " + this.pshbAgentID + " has started current step = " + currentStep +"==========="); //debugging
         eState.debugWriter.addToFile("========Agent " + this.pshbAgentID + " has started current step = " + currentStep +"==========="); //log current step
-//        this.currentTempGrid = (DoubleGrid2D) eState.weeklyTempGrids[eState.currentWeek].getGrid(); //get current temperature map
-//        this.currentTemp = this.currentTempGrid.get(this.tempGridX, this.tempGridY); //obtain current temperature from current temp map based on the locations
         try {
             this.currentTemp = eState.tempService.getTempAtGrid(eState.currentWeek+1, tempGridX, tempGridY);
             System.out.println("currentWeek: " + eState.currentWeek);
@@ -234,7 +232,6 @@ public class PSHBAgent implements Steppable {
         } else { // not want to stay, dispersal anyway
             this.actionExecuted = "not stay do dispersal";
             dispersal(state); //execute the dispersal sub-model
-//            this.pshbStage = Stage.ADULTCOL;
         }
         this.pshbLongevUsed ++; //the age is increased by one
     }
@@ -253,6 +250,8 @@ public class PSHBAgent implements Steppable {
             colonization(state); //execute the colonization function
         } catch (TransformException e) {
             throw new RuntimeException(e); //signal that an exception should be thrown
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
         this.pshbLongevUsed ++; //the adult age increased by one
     }
@@ -311,7 +310,7 @@ public class PSHBAgent implements Steppable {
             if(currentTemp > 15 && currentTemp< 30){ //if the temperature is appropriate
                 pshbSonDegDays = pshbSonDegDays + (int) currentTemp * 7; //update the degree-days of sons
             }
-            state.debugWriter.addToFile("pshbSonDegDays after = " + pshbDegDays); //log the degree days
+            state.debugWriter.addToFile("pshbSonDegDays after = " + pshbSonDegDays); //log the degree days
         } else{ //if finishing the development
             pshbSonDegDays = 0; //reset the degree days of the sons
             finished = true; //define the son's development has been completed
@@ -324,7 +323,6 @@ public class PSHBAgent implements Steppable {
     *                          MOVEMENT
     * **********************************************************************
      */
-    //CHANGE
     public void dispersal(PSHBEnvironment state){
         state.debugWriter.addToFile("This agent began dispersal at lon:"    + this.longitudeX+ "   lat: " + this.latitudeY);
         //Determine the Distance
@@ -362,7 +360,8 @@ public class PSHBAgent implements Steppable {
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
-            state.agentDisplayGrid.setObjectLocation(this, displayX, displayY); //set the agent at the location
+            state.agentDevelopGrid.setObjectLocation(this, tempGridX, tempGridY); //set the agent at the location
+            state.agentDisplayGrid.setObjectLocation(this, displayX, displayY); //show the new location on display
             state.debugWriter.addToFile("This agent has dispersed to lon: "    + this.longitudeX+ "   lat:  " + this.latitudeY); //check the location after movement
         }
         //check the new location is in the patch
@@ -375,10 +374,10 @@ public class PSHBAgent implements Steppable {
     * ************************************************************************************
      */
 
-    public void colonization(PSHBEnvironment state) throws TransformException {
+    public void colonization(PSHBEnvironment state) throws TransformException, IOException {
         //check if reaching lifespan
         this.pshbRemainingTicks = this.pshbLongev - this.pshbLongevUsed; //how many ticks remaining in the current date
-        if(this.pshbRemainingTicks < 0) {
+        if(this.pshbRemainingTicks <= 0) {
             state.debugWriter.addToFile("This agent ran out of pshbLongev, fail to colonize and die."); //log
             state.numDeathInADULTCOL ++; //death counts in COLONIZATION Stage increased by one
             state.numDeath ++; //death counts increased by one
@@ -407,9 +406,9 @@ public class PSHBAgent implements Steppable {
                 if(this.pshbRemainingTicks > 0){ //still got time for dispersal
                     state.debugWriter.addToFile("This agent fail to colonize and disperse again."); //log the failure of the colonization
                     this.actionExecuted = "fail to colonize and disperse again";
-                    dispersal(state); //dispersal this step or next step???
+                    this.pshbStage = Stage.ADULTDISP; //go back to ADULTDISP in the next tick
                 }
-                else {
+                else { //pshbRemainingTick <= 0
                     state.debugWriter.addToFile("This agent fail to colonize and die."); //log
                     state.numDeathInADULTCOL ++; //death counts in COLONIZATION Stage increased by one
                     state.numDeath ++; //death counts increased by one
@@ -435,14 +434,11 @@ public class PSHBAgent implements Steppable {
 
     public void  colonizeAHost(PSHBEnvironment state, double lon, double lat) throws TransformException {
         //convert lon and lat into veg map grid coordiantes
-        try {
-            vegGridX = CoordinateConverter.coordToGrid(state.crsPrHost, state.ggHost, lon, lat)[0]; //convert lon to gridx in the veg map
-            vegGridY = CoordinateConverter.coordToGrid(state.crsPrHost, state.ggHost, lon, lat)[1]; //convert lat to gridy in the veg map
-            displayX = vegGridX * state.agentDisplayGrid.getWidth() / state.vegHost.getWidth();
-            displayY = vegGridY * state.agentDisplayGrid.getHeight() / state.vegHost.getHeight();
-        } catch (TransformException e) { //catch the exception
-            throw new RuntimeException(e);
-        }
+        int[] grid = CoordinateConverter.coordToGrid(state.crsPrHost, state.ggHost, lon, lat);
+        vegGridX = grid[0]; //convert lon to gridx in the veg map
+        vegGridY = grid[1]; //convert lat to gridy in the veg map
+        displayX = vegGridX * state.agentDisplayGrid.getWidth() / state.vegHost.getWidth();
+        displayY = vegGridY * state.agentDisplayGrid.getHeight() / state.vegHost.getHeight();
         //Only the cells within the patch got tracked
         if(state.getPatchID(state, vegGridX, vegGridY) != 0) { //this cell is within the RESET area
             //add this agent into the colonized cell, activate a new cell or join in a current active cell
@@ -451,14 +447,16 @@ public class PSHBAgent implements Steppable {
                 PSHBVegCell newActiveCell = new PSHBVegCell(state, members, vegGridX, vegGridY, state.getPatchID(state,vegGridX, vegGridY)); //activate a new cell
                 state.vegMapCell.put(String.join("-", String.valueOf(newActiveCell.vegGridX), String.valueOf(newActiveCell.vegGridY)), newActiveCell); //set the entity
                 newActiveCell.addCellMembers(this); //add this member into the entity
-                this.pshbHostCell.numColonizedAgents ++; //the cell has a new member!
-                state.agentColonizedGrid.setObjectLocation(newActiveCell, displayX, displayY); //set the vegCell entity in the space
-                state.debugWriter.addToFile("a new active cell at vegGridX = " + this.vegGridX + "   vegGridY = " + this.vegGridY); //log
+                state.agentColonizedGrid.setObjectLocation(newActiveCell, vegGridX, vegGridY); //set the vegCell entity in the space
+                state.agentDevelopGrid.setObjectLocation(newActiveCell, vegGridX, vegGridY); //also set the agent in the master grid
+                state.debugWriter.addToFile("a new active cell at vegGridX = " + this.vegGridX + "   vegGridY = " + this.vegGridY);//log
+                state.debugWriter.addToFile("this agent's host cell : " + this.pshbHostCell);
             } else { //if there is already someone in this location
                 PSHBVegCell joinCurrentCell = state.getVegCell(vegGridX, vegGridY); //get the active cell
                 joinCurrentCell.addCellMembers(this); //add this current agent into the cell
-                this.pshbHostCell.numColonizedAgents ++; //the cell has a new member!
-                state.agentColonizedGrid.setObjectLocation(joinCurrentCell, displayX, displayY); //set the entity in the space
+                state.agentColonizedGrid.setObjectLocation(joinCurrentCell, vegGridX, vegGridY); //set the entity in the space
+                state.agentDevelopGrid.setObjectLocation(joinCurrentCell, vegGridX, vegGridY); //also set the agent on the master grid
+                state.debugWriter.addToFile("this agent's host cell : " + this.pshbHostCell);
             }
         }
     }
@@ -479,12 +477,13 @@ public class PSHBAgent implements Steppable {
         if(this.pshbSpawn ==0) {
             return;
         }
-        for(int i=0; i< parent.pshbSpawn; i++) { //loop for all the offspring
+        for(int i=0; i< this.pshbSpawn; i++) { //loop for all the offspring
             state.pshbAgentID ++; //define an unique ID for the newborn
             PSHBAgent a = new PSHBAgent(state, coordX_newborn, coordY_newborn, state.pshbAgentID, Stage.LARVA); //create a newborn
             double nextTick = state.schedule.getTime() + 1;
             a.event = state.schedule.scheduleRepeating(nextTick, 1, a);
-            state.agentDevelopGrid.setObjectLocation(a,a.displayX,a.displayY);
+            state.agentDevelopGrid.setObjectLocation(a,a.tempGridX,a.tempGridY);
+            state.agentDisplayGrid.setObjectLocation(a, a.displayX, a.displayY); //set the location on display for the newborn
             System.out.println("pshbAgentID = " + a.pshbAgentID + "is a newborn!!"); //print this newborn in the console
             state.debugWriter.addToFile("pshbAgentID = " + a.pshbAgentID + "is a newborn!!");
             a.dateData.put("birthday", currentStep); //record the birthday
@@ -501,7 +500,7 @@ public class PSHBAgent implements Steppable {
     * **********************************************************************
      */
     public boolean checkDormancy(PSHBEnvironment state) {
-        if(state.currentWeek <16 && currentTemp < 15 || state.currentWeek > 30 && currentTemp < 15) { //during the dormancy time or low/high temp, go dormancy
+        if((state.currentWeek <16 && currentTemp < 15) || (state.currentWeek > 30 && currentTemp < 15)) { //during the dormancy time or low/high temp, go dormancy
             if(pshbStage == Stage.ADULTDISP) { //if during the DISPERSAL, the agent will die
                 pshbDorm = true;
                 death(state);

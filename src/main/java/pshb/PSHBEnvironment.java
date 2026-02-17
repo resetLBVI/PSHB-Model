@@ -32,7 +32,7 @@ public class PSHBEnvironment extends SimState {
     String projectPath = currentRelativePath.toAbsolutePath().toString();
     //input and output files path
     public String debugFile = "RESET_PSHB_debug.txt";
-    public String logFile = "RESET_PSHB_log.csv";
+    public String logFile = "logPSHBWeekly.csv";
     public String agentSummaryFile = "RESET_PSHB_agentSummary.csv";
     public String popSummaryFile = "RESET_PSHB_popSummary.csv";
     public String impactFile = "RESET_PSHB_impact.csv";
@@ -55,6 +55,7 @@ public class PSHBEnvironment extends SimState {
     GridGeometry2D ggRepr;
     LazyVegGeoTiff vegHost; //primary Host raster
     LazyVegGeoTiff vegRepr; //primary reproduction raster
+    //SparseGrid2D can hold multiple objects per location
     public SparseGrid2D agentDevelopGrid; //this raster map is for agent's development, which is based on the temperature maps
     public SparseGrid2D agentColonizedGrid; // this raster map is for agent's colonization and reproduction, which is based on the vegetation maps
     public SparseGrid2D agentDisplayGrid;
@@ -123,11 +124,11 @@ public class PSHBEnvironment extends SimState {
             this.logWriter = new OutputWriter(logFile);
             this.logWriter.createFile(logHeader);
             // (3) create agentSummaryFile
-            String[] weeklyAgentSummaryHeader = {"step", "agentID", "birthday", "date of death", "lon at birth",
+            String[] agentSummaryHeader = {"step", "agentID", "birthday", "date of death", "lon at birth",
                     "lat at birth", "lon at death", "lat at death", "death stage", "death age"}; //currently collect 10 data
             String agentSummaryFile = OutputWriter.getFileName(this.agentSummaryFile, false);
             this.agentSummaryWriter = new OutputWriter(agentSummaryFile);
-            this.agentSummaryWriter.createFile(weeklyAgentSummaryHeader);
+            this.agentSummaryWriter.createFile(agentSummaryHeader);
             // (4) create populationSummaryFile
             String[] popSummaryHeader = {"year", "POP size", "Num of Births", "Num of Deaths", "Num Deaths in DEV/PREOVI",
                     "Num Deaths in DISP", "Num Deaths in COL"}; //currently collect 7 data
@@ -185,62 +186,6 @@ public class PSHBEnvironment extends SimState {
         System.out.println("--------------END of the Start Step----------------");
     }
 
-//    public void importWeeklyRasterMap() {
-//        try {
-//            String basicGridFileName = OutputWriter.getFileName("/RESET_PSHB_inputData/TempGridReset_week_1.asc", true);
-//            System.out.println("reading raster map");
-//            File initialFile = new File(basicGridFileName);
-//            InputStream inputStream = Files.newInputStream(initialFile.toPath());
-//            System.out.println("fileName = " + basicGridFileName);
-//            ArcInfoASCGridImporter.read(inputStream, GeomGridField.GridDataType.DOUBLE, this.basicGrid);
-//            this.weeklyTempGrids = new GeomGridField[weekOfTemp];
-//            for(int i=0; i<weekOfTemp; i++){
-//                this.weeklyTempGrids[i] = new GeomGridField();
-//                String weeklyTempFileName = OutputWriter.getFileName("/RESET_PSHB_inputData/" + String.format("TempGridReset_week_%d.asc", i+1), true);
-//                File continueFile = new File(weeklyTempFileName);
-//                inputStream = Files.newInputStream(continueFile.toPath());
-//                System.out.println("fileName = " + String.format("TempGridReset_week_%d.asc", i+1));
-//                ArcInfoASCGridImporter.read(inputStream, GeomGridField.GridDataType.DOUBLE, this.weeklyTempGrids[i]);
-//            }
-//            this.tempGrid = (DoubleGrid2D) this.weeklyTempGrids[0].getGrid();
-////            this.tempGrid = (SparseGrid2D) this.weeklyTempGrids[0].getGrid();
-//        } catch (Exception e) {
-//            e.printStackTrace();
-//        }
-//        globalMBR = this.basicGrid.getMBR();
-//        this.basicGrid.setMBR(globalMBR);
-//    }
-
-//    public void importTiffVegRasterMaps() throws IOException {
-//        String hostPrFileName = OutputWriter.getFileName("RESET_PSHB_inputData/VegRaster_PrHost_20240730.tif", true);
-//        String reprPrFileName = OutputWriter.getFileName("RESET_PSHB_inputData/VegRaster_PrRepr_20240730.tif", true);
-//        hostPrFileName = hostPrFileName.replace("%20", " ");
-//        reprPrFileName = reprPrFileName.replace("%20", " ");
-//        File tiffVegRaster_PrHost = new File(hostPrFileName);
-//        File tiffVegRaster_PrRepr = new File(reprPrFileName);
-//        System.out.println("Trying to read: " + tiffVegRaster_PrHost.getAbsolutePath());
-//        System.out.println("Exists? " + tiffVegRaster_PrHost.exists());
-//        System.out.println("Can read? " + tiffVegRaster_PrHost.canRead());
-//
-//        GeoTiffReader reader_PrHost = new GeoTiffReader(tiffVegRaster_PrHost);
-//        GeoTiffReader reader_PrRepr = new GeoTiffReader(tiffVegRaster_PrRepr);
-//        GridCoverage2D covPrHost = reader_PrHost.read(null);
-//        GridCoverage2D covPrRepr = reader_PrRepr.read(null);
-//        tiffRasterHost = covPrHost.getRenderedImage().getData();
-//        tiffRasterRepr = covPrRepr.getRenderedImage().getData();
-//        // get x, y bounds
-////        System.out.println("Raster Host bounds = " + tiffRasterHost.getBounds());
-////        System.out.println("Raster Repr bounds = " + tiffRasterRepr.getBounds());
-//        // get lon, lat bounds (longitude supplied first)
-////        System.out.println(covPrHost.getEnvelope());
-////        System.out.println(covPrRepr.getEnvelope());
-//        //making use of the coordinate reference system
-//        crsPrHost = covPrHost.getCoordinateReferenceSystem2D();
-//        crsPrRepr = covPrRepr.getCoordinateReferenceSystem2D();
-//        //Returns a math transform for the two dimensional part for conversion from world to grid coordinates.
-//        ggHost = covPrHost.getGridGeometry();
-//        ggRepr = covPrRepr.getGridGeometry();
-//    }
 
     public void importTiffVegRasterMaps() throws Exception {
         String hostPrFileName = OutputWriter.getFileName("RESET_PSHB_inputData/VegRaster_PrHost_20240730.tif", true).replace("%20", " ");
@@ -309,7 +254,8 @@ public class PSHBEnvironment extends SimState {
             for(int j=0; j<nAgentsAtLocation; j++){
                 PSHBAgent a = makeAgent(inputCoordX, inputCoordY, Stage.LARVA);
                 a.event = schedule.scheduleRepeating(Schedule.EPOCH, 1, a);
-                agentDisplayGrid.setObjectLocation(a, a.displayLocation);
+                agentDisplayGrid.setObjectLocation(a, a.displayX, a.displayY);
+                agentDevelopGrid.setObjectLocation(a, a.tempGridX, a.tempGridY);
             }
         }
     }
@@ -341,9 +287,12 @@ public class PSHBEnvironment extends SimState {
             return patchID;
         }
     }
-    //Get probability of hosting a cell
-    public double getVegMapPrHost(PSHBEnvironment state, double coordX, double coordY) throws TransformException {
-        double hostRasterValue = 0;
+    //Get probability of hosting a cell; update 2026-02-03
+    public double getVegMapPrHost(PSHBEnvironment state, double coordX, double coordY) throws TransformException, IOException {
+        String vegAttributeInfo = OutputWriter.getFileName("RESET_PSHB_inputData/RESET_merge_attributes.csv", true);
+        VegAttributesLoader attributesLoader = new VegAttributesLoader(vegAttributeInfo); //initiate a new VegAttributeLoader class
+        Map<Integer, VegAttributes> vegInfo = attributesLoader.getVegInformation(); //get all vegetation attributes information
+        double hostRasterValue = 0; //read the raster value from the veg tiff map
         double hostProb = 0;
         int posGridX; //grid x in veg map
         int posGridY; //grid y in veg map
@@ -353,31 +302,52 @@ public class PSHBEnvironment extends SimState {
         } catch (TransformException e) {
             throw new RuntimeException(e);
         }
-        hostRasterValue = vegHost.valueAtGrid(posGridX, posGridY);
-        if(hostRasterValue > 100000) {
+        hostRasterValue = vegHost.valueAtGrid(posGridX, posGridY); //this value either represents a value of probability (outside a patch) or a patchID
+        if(hostRasterValue > 100000) { //means this cell is not a patch
             hostProb = (hostRasterValue - 100000) / 100 ;
-        } else {
-            hostProb = random.nextDouble(); //So far, Use a random number because we haven't had veg data
+        } else { //this cell is in a patch
+            int mapCode = vegInfo.get(hostRasterValue).mapCode;
+            double pWillowSum = vegInfo.get(hostRasterValue).pTrWillow + vegInfo.get(hostRasterValue).pShWillowM;
+            if(mapCode <= 217 && mapCode >= 111) { //the dominant vegetation is the host species
+                hostProb = 1.0;
+            }  else if (pWillowSum > 0){
+                hostProb = -4.5 + pWillowSum * 15.25;
+            } else if (pWillowSum == 0) {
+                hostProb = 0;
+            }
         }
         return hostProb;
     }
-    //ADD
-    public double getVegMapPrRepr(PSHBEnvironment state, double coordX, double coordY) throws TransformException{
+    //update: 2026-02-03
+    public double getVegMapPrRepr(PSHBEnvironment state, double coordX, double coordY) throws TransformException, IOException {
+        String vegAttributeInfo = OutputWriter.getFileName("RESET_PSHB_inputData/RESET_merge_attributes.csv", true);
+        VegAttributesLoader attributesLoader = new VegAttributesLoader(vegAttributeInfo); //initiate a new VegAttributeLoader class
+        Map<Integer, VegAttributes> vegInfo = attributesLoader.getVegInformation(); //get all vegetation attributes information
         double pixelValue = 0;
         double reprProb = 0;
         int posGridX;
         int posGridY;
         try {
-            posGridX = CoordinateConverter.coordToGrid(state.crsPrHost, state.ggRepr, coordX, coordY)[0]; //convert lon to gridx
-            posGridY = CoordinateConverter.coordToGrid(state.crsPrHost, state.ggRepr, coordX, coordY)[1]; //convert lat to gridy
+            posGridX = CoordinateConverter.coordToGrid(state.crsPrRepr, state.ggRepr, coordX, coordY)[0]; //convert lon to gridx
+            posGridY = CoordinateConverter.coordToGrid(state.crsPrRepr, state.ggRepr, coordX, coordY)[1]; //convert lat to gridy
         } catch (TransformException e) {
             throw new RuntimeException(e);
         }
         pixelValue = vegRepr.valueAtGrid(posGridX, posGridY);
-        if(pixelValue > 100000) {
+        if(pixelValue > 100000) { //this cell is not in a patch
             reprProb = (pixelValue - 100000) / 100 ;
-        } else {
-            reprProb = random.nextDouble(); //So far, Use a random number because we haven't had veg data
+        } else { //this cell is in a patch
+            int mapCode = vegInfo.get(pixelValue).mapCode;
+            double pWillowSum = vegInfo.get(pixelValue).pTrWillow + vegInfo.get(pixelValue).pShWillowM;
+            if(mapCode == 217 || mapCode == 215) { //the dominant vegetation is the host species
+                reprProb = 0.0;
+            }  else if (mapCode < 217 && mapCode >= 111 && mapCode != 215){
+                reprProb = 1.0;
+            } else if (pWillowSum > 0){
+                reprProb = 1.0;
+            } else if (pWillowSum == 0) {
+                reprProb = 0;
+            }
         }
         return reprProb;
     }
