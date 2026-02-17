@@ -25,9 +25,9 @@ public class PSHBAgent implements Steppable {
     int tempGridY; //y location on the temperature grid map
     int vegGridX; //x location on the vegetation grid map
     int vegGridY; //y location on the vegetation grid map
-    int displayX; //x location on the display window
-    int displayY; //y location on the display window
-    Int2D displayLocation; //agent's current location in UI
+//    int displayX; //x location on the display window
+//    int displayY; //y location on the display window
+//    Int2D displayLocation; //agent's current location in UI
     int pshbDegDaysReq; //the degree-days an agent is required for development, define in constructor
     int pshbDegDays; //the counts of the degree-days
     int pshbSonDegDays; // the counts of son's degree-days
@@ -76,13 +76,13 @@ public class PSHBAgent implements Steppable {
         this.tempGridY = CoordinateConverter.latitudeYToGridY(latitudeY, state.yllcornerTemp, state.tempCellSize, state.nRowsTemp);
         this.vegGridX = CoordinateConverter.longitudeXToGridX(longitudeX, state.xllcornerVeg, state.vegCellSize);
         this.vegGridY = CoordinateConverter.latitudeYToGridY(latitudeY, state.yllcornerVeg, state.vegCellSize, state.nRowsVeg);
-        try {
-            this.displayX = tempGridX * state.agentDisplayGrid.getWidth() / state.tempService.getWidth(1);
-            this.displayY = tempGridY * state.agentDisplayGrid.getHeight() / state.tempService.getHeight(1);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-        this.displayLocation = new Int2D(displayX, displayY);
+//        try {
+//            this.displayX = tempGridX * state.agentDisplayGrid.getWidth() / state.tempService.getWidth(1);
+//            this.displayY = tempGridY * state.agentDisplayGrid.getHeight() / state.tempService.getHeight(1);
+//        } catch (Exception e) {
+//            throw new RuntimeException(e);
+//        }
+//        this.displayLocation = new Int2D(displayX, displayY);
         this.pshbDegDaysReq = (int) (398 + state.random.nextGaussian() * 17); //every agent has slightly different on development
         this.pshbDegDays = 0; //the counts of the degree-days
         this.pshbSonDegDays = 0; // the counts of son's degree-days
@@ -355,13 +355,13 @@ public class PSHBAgent implements Steppable {
             try {
                 tempGridX = CoordinateConverter.coordToGrid(state.weekCRS, state.weekGG, longitudeX, latitudeY)[0]; //convert lon to gridx in the veg map
                 tempGridY = CoordinateConverter.coordToGrid(state.weekCRS, state.weekGG, longitudeX, latitudeY)[1]; //convert lat to gridy in the veg map
-                displayX = tempGridX * state.agentDisplayGrid.getWidth() / state.tempService.getWidth(1);
-                displayY = tempGridY * state.agentDisplayGrid.getHeight() / state.tempService.getHeight(1);
+//                displayX = tempGridX * state.agentDisplayGrid.getWidth() / state.tempService.getWidth(1);
+//                displayY = tempGridY * state.agentDisplayGrid.getHeight() / state.tempService.getHeight(1);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
             state.agentDevelopGrid.setObjectLocation(this, tempGridX, tempGridY); //set the agent at the location
-            state.agentDisplayGrid.setObjectLocation(this, displayX, displayY); //show the new location on display
+//            state.agentDisplayGrid.setObjectLocation(this, displayX, displayY); //show the new location on display
             state.debugWriter.addToFile("This agent has dispersed to lon: "    + this.longitudeX+ "   lat:  " + this.latitudeY); //check the location after movement
         }
         //check the new location is in the patch
@@ -437,8 +437,8 @@ public class PSHBAgent implements Steppable {
         int[] grid = CoordinateConverter.coordToGrid(state.crsPrHost, state.ggHost, lon, lat);
         vegGridX = grid[0]; //convert lon to gridx in the veg map
         vegGridY = grid[1]; //convert lat to gridy in the veg map
-        displayX = vegGridX * state.agentDisplayGrid.getWidth() / state.vegHost.getWidth();
-        displayY = vegGridY * state.agentDisplayGrid.getHeight() / state.vegHost.getHeight();
+//        displayX = vegGridX * state.agentDisplayGrid.getWidth() / state.vegHost.getWidth();
+//        displayY = vegGridY * state.agentDisplayGrid.getHeight() / state.vegHost.getHeight();
         //Only the cells within the patch got tracked
         if(state.getPatchID(state, vegGridX, vegGridY) != 0) { //this cell is within the RESET area
             //add this agent into the colonized cell, activate a new cell or join in a current active cell
@@ -483,7 +483,7 @@ public class PSHBAgent implements Steppable {
             double nextTick = state.schedule.getTime() + 1;
             a.event = state.schedule.scheduleRepeating(nextTick, 1, a);
             state.agentDevelopGrid.setObjectLocation(a,a.tempGridX,a.tempGridY);
-            state.agentDisplayGrid.setObjectLocation(a, a.displayX, a.displayY); //set the location on display for the newborn
+//            state.agentDisplayGrid.setObjectLocation(a, a.displayX, a.displayY); //set the location on display for the newborn
             System.out.println("pshbAgentID = " + a.pshbAgentID + "is a newborn!!"); //print this newborn in the console
             state.debugWriter.addToFile("pshbAgentID = " + a.pshbAgentID + "is a newborn!!");
             a.dateData.put("birthday", currentStep); //record the birthday
