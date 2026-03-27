@@ -13,6 +13,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <geotools.version>34.0</geotools.version>
         <maven.compiler.release>17</maven.compiler.release>
+        <commons-csv.version>1.10.0</commons-csv.version>
     </properties>
 
     <!-- Keep GeoTools modules aligned -->
@@ -89,6 +90,12 @@
             <artifactId>mason</artifactId>
             <version>21</version>
         </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-csv</artifactId>
+            <version>${commons-csv.version}</version>
+        </dependency>
+
     </dependencies>
 
     <repositories>

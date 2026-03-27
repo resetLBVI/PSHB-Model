@@ -59,6 +59,10 @@ public class PSHBEnvironment extends SimState {
     public SparseGrid2D agentDevelopGrid; //this raster map is for agent's development, which is based on the temperature maps
     public SparseGrid2D agentColonizedGrid; // this raster map is for agent's colonization and reproduction, which is based on the vegetation maps
     public SparseGrid2D agentDisplayGrid;
+    // ------------------------------------------------------------------------------------
+    // Vegetation attributes
+    // ------------------------------------------------------------------------------------
+    public Map<Integer, VegAttributes> vegInfo;
 //    public ObjectGrid2D vegCellGrid;
     int displayWidth = 100;
     int displayHeight = 100;
@@ -111,81 +115,150 @@ public class PSHBEnvironment extends SimState {
     public void start() {
         super.start();
 
-        try {
-            // (1) create debugFile
-            String[] debugHeader = {};
-            debugFile = OutputWriter.getFileName(this.debugFile, false);
-            this.debugWriter = new OutputWriter(debugFile);
-            this.debugWriter.createFile(debugHeader);
-            // (2) create a log file
-            String[] logHeader = {"currentStep", "currentWeek", "currentYear", "agentID", "Stage", "currentAge",
-                    "longitude", "latitude", "patchID", "actionExecuted"};
-            String logFile = OutputWriter.getFileName(this.logFile, false);
-            this.logWriter = new OutputWriter(logFile);
-            this.logWriter.createFile(logHeader);
-            // (3) create agentSummaryFile
-            String[] agentSummaryHeader = {"step", "agentID", "birthday", "date of death", "lon at birth",
-                    "lat at birth", "lon at death", "lat at death", "death stage", "death age"}; //currently collect 10 data
-            String agentSummaryFile = OutputWriter.getFileName(this.agentSummaryFile, false);
-            this.agentSummaryWriter = new OutputWriter(agentSummaryFile);
-            this.agentSummaryWriter.createFile(agentSummaryHeader);
-            // (4) create populationSummaryFile
-            String[] popSummaryHeader = {"year", "POP size", "Num of Births", "Num of Deaths", "Num Deaths in DEV/PREOVI",
-                    "Num Deaths in DISP", "Num Deaths in COL"}; //currently collect 7 data
-            String popSummaryFile = OutputWriter.getFileName(this.popSummaryFile, false);
-            this.popSummaryWriter = new OutputWriter(popSummaryFile);
-            this.popSummaryWriter.createFile(popSummaryHeader);
-            // (5) create impactFile
-            String[] impactDataHeader = {"year", "week", "deadVegetation", "x", "y", "patchID"}; //currently collect 6 data
-            String impactFile = OutputWriter.getFileName(this.impactFile, false);
-            this.impactWriter = new OutputWriter(impactFile);
-            this.impactWriter.createFile(impactDataHeader);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-        //(6) import weekly temperature maps
-        // (6-1) init the lazy service (keeps no rasters in memory)
-        tempService = new WeeklyTempService(52);
+        initWriters();
 
-        // (6-2) set initial week metadata cache (agents can read these fields)
-        try {
-            weekCRS = tempService.getCRS(currentWeek +1);
-            weekGG  = tempService.getGridGeometry(currentWeek +1);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to init WeeklyTempService metadata", e);
-        }
-        for (Iterator<ImageReader> it = ImageIO.getImageReadersByFormatName("tiff"); it.hasNext(); ) {
-            var r = it.next();
-            System.out.println(" - " + r.getClass().getName());
-        }
+        // 1) Temperature service + grids (CREATE ONCE, DO NOT RECREATE LATER)
+        initTemperatureServiceAndGrids();
 
+        // 2) Vegetation rasters + colonization grid
         try {
-            // (7) import vegetation maps
             importTiffVegRasterMaps();
-            //(8) Initiate other fields
-            this.agentDisplayGrid = new SparseGrid2D(displayWidth, displayHeight);
-            this.agentDevelopGrid = new SparseGrid2D(tempService.getWidth(1), tempService.getHeight(1));
             this.agentColonizedGrid = new SparseGrid2D(vegHost.getWidth(), vegHost.getHeight());
-
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+        // 3) Display grid
+        this.agentDisplayGrid = new SparseGrid2D(displayWidth, displayHeight);
+        // 3) Read vegetation attributes
+        readVegAttributes();
 
-        //(9) initiate timer just to update the time
+        // 4) Schedule timer (updates week/year + maybe rolls temp week)
         PSHBTimer systemTimer = new PSHBTimer();
         schedule.scheduleRepeating(Schedule.EPOCH, 0, systemTimer);
-        //(10)make agents
+
+        // 5) Make initial agents
         try {
             makeAgentsInSpace();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        //(11)initiate observer
+
+        // 6) Observer
         PSHBObserver observer = new PSHBObserver();
         schedule.scheduleRepeating(Schedule.EPOCH, 2, observer);
+
         System.out.println("--------------END of the Start Step----------------");
     }
 
+    @Override
+    public void finish() {
+        super.finish();
+        if (tempService != null) {
+            try { tempService.close(); } catch (Exception ignored) {}
+        }
+    }
+
+    // ------------------------------------------------------------------------------------
+    // Initialization helpers
+    // ------------------------------------------------------------------------------------
+    private void initWriters() {
+        try {
+            // debug
+            String[] debugHeader = {};
+            debugFile = OutputWriter.getFileName(this.debugFile, false);
+            debugWriter = new OutputWriter(debugFile);
+            debugWriter.createFile(debugHeader);
+
+            // log
+            String[] logHeader = {"currentStep", "currentWeek", "currentYear", "agentID", "Stage", "currentAge",
+                    "longitude", "latitude", "patchID", "actionExecuted"};
+            String logPath = OutputWriter.getFileName(this.logFile, false);
+            logWriter = new OutputWriter(logPath);
+            logWriter.createFile(logHeader);
+
+            // agent summary
+            String[] agentSummaryHeader = {"step", "agentID", "birthday", "date of death", "lon at birth",
+                    "lat at birth", "lon at death", "lat at death", "death stage", "death age"};
+            String agentSummaryPath = OutputWriter.getFileName(this.agentSummaryFile, false);
+            agentSummaryWriter = new OutputWriter(agentSummaryPath);
+            agentSummaryWriter.createFile(agentSummaryHeader);
+
+            // population summary
+            String[] popSummaryHeader = {"year", "POP size", "Num of Births", "Num of Deaths",
+                    "Num Deaths in DEV/PREOVI", "Num Deaths in DISP", "Num Deaths in COL"};
+            String popSummaryPath = OutputWriter.getFileName(this.popSummaryFile, false);
+            popSummaryWriter = new OutputWriter(popSummaryPath);
+            popSummaryWriter.createFile(popSummaryHeader);
+
+            // impact
+            String[] impactHeader = {"year", "week", "deadVegetation", "x", "y", "patchID"};
+            String impactPath = OutputWriter.getFileName(this.impactFile, false);
+            impactWriter = new OutputWriter(impactPath);
+            impactWriter.createFile(impactHeader);
+
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private void initTemperatureServiceAndGrids() {
+        // (1) Init lazy service (holds no rasters in memory)
+        tempService = new WeeklyTempService(52);
+
+        // (2) Determine raster dimensions ONCE (for any spatial grids that must match temp extent)
+        final int w;
+        final int h;
+        try {
+            // Use week 1 (or any known valid week) just to get dimensions.
+            w = tempService.getWidth(1);
+            h = tempService.getHeight(1);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to read temperature raster dimensions from WeeklyTempService", e);
+        }
+
+        // (3) Create only the grids you still need
+        // Agent development grid uses the same pixel space as the temperature maps.
+        agentDevelopGrid = new SparseGrid2D(w, h);
+
+        // (4) Cache metadata for current week (agents can use these for coordinate conversion)
+        refreshTemperatureWeekMetadata();
+
+        // (5) Optional debug: list TIFF readers
+        debugPrintTiffReaders();
+
+        System.out.println("[ENV] WeeklyTempService initialized (lazy). " +
+                "env=" + System.identityHashCode(this) +
+                " agentDevelopGrid=" + System.identityHashCode(agentDevelopGrid) +
+                " tempGrid=null");
+    }
+
+    /** Refresh week CRS + grid geometry cache for currentWeek. */
+    private void refreshTemperatureWeekMetadata() {
+        final int weekIndex = currentWeek + 1; // your convention: currentWeek is 0-based, GeoTIFF weeks are 1-based
+        try {
+            weekCRS = tempService.getCRS(weekIndex);
+            weekGG  = tempService.getGridGeometry(weekIndex);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to cache temperature metadata for week=" + weekIndex, e);
+        }
+    }
+
+    private void debugPrintTiffReaders() {
+        for (Iterator<ImageReader> it = ImageIO.getImageReadersByFormatName("tiff"); it.hasNext(); ) {
+            ImageReader r = it.next();
+            System.out.println(" - " + r.getClass().getName());
+        }
+    }
+    /** Call when your sim advances to a new week for temperature maps. */
+    public void rollToWeekForTempMaps(int newWeek) {
+        currentWeek = newWeek;
+        try {
+            weekCRS = tempService.getCRS(currentWeek + 1);
+            weekGG  = tempService.getGridGeometry(currentWeek + 1);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to load metadata for week " + currentWeek + 1, e);
+        }
+    }
 
     public void importTiffVegRasterMaps() throws Exception {
         String hostPrFileName = OutputWriter.getFileName("RESET_PSHB_inputData/VegRaster_PrHost_20240730.tif", true).replace("%20", " ");
@@ -214,24 +287,22 @@ public class PSHBEnvironment extends SimState {
 
     public void updateYear() {this.currentYear = (int)(schedule.getSteps() / 52); }
 
-    /** Call when your sim advances to a new week for temperature maps. */
-    public void rollToWeekForTempMaps(int newWeek) {
-        currentWeek = newWeek;
+
+    // ------------------------------------------------------------------------------------
+    // Vegetation attributes
+    // ------------------------------------------------------------------------------------
+    public void readVegAttributes() {
+        String vegAttributeInfo = null;
         try {
-            weekCRS = tempService.getCRS(currentWeek + 1);
-            weekGG  = tempService.getGridGeometry(currentWeek + 1);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to load metadata for week " + currentWeek + 1, e);
+            vegAttributeInfo = OutputWriter.getFileName("RESET_PSHB_inputData/RESET_merge_attributes_corrected.csv", true);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
+        VegAttributesLoader attributesLoader = new VegAttributesLoader(vegAttributeInfo);
+        vegInfo = attributesLoader.getVegInformation();
     }
 
-    @Override
-    public void finish() {
-        super.finish();
-        if (tempService != null) {
-            try { tempService.close(); } catch (Exception ignored) {}
-        }
-    }
+
 
 
     /*
@@ -248,8 +319,6 @@ public class PSHBEnvironment extends SimState {
             InfoIdentifier info = initialInfo.get(i);
             double inputCoordX = info.getInputX();
             double inputCoordY = info.getInputY();
-//            int tempX = CoordinateConverter.longitudeXToGridX(inputCoordX, xllcornerTemp, tempCellSize); //the x location on the temp map
-//            int tempY = CoordinateConverter.latitudeYToGridY(inputCoordY, yllcornerTemp, tempCellSize, nRowsTemp); //the y location on the temp map
             int nAgentsAtLocation = info.getNumOfPSHBAgents();
             for(int j=0; j<nAgentsAtLocation; j++){
                 PSHBAgent a = makeAgent(inputCoordX, inputCoordY, Stage.LARVA);
@@ -287,70 +356,63 @@ public class PSHBEnvironment extends SimState {
             return patchID;
         }
     }
-    //Get probability of hosting a cell; update 2026-02-03
-    public double getVegMapPrHost(PSHBEnvironment state, double coordX, double coordY) throws TransformException, IOException {
-        String vegAttributeInfo = OutputWriter.getFileName("RESET_PSHB_inputData/RESET_merge_attributes.csv", true);
-        VegAttributesLoader attributesLoader = new VegAttributesLoader(vegAttributeInfo); //initiate a new VegAttributeLoader class
-        Map<Integer, VegAttributes> vegInfo = attributesLoader.getVegInformation(); //get all vegetation attributes information
-        double hostRasterValue = 0; //read the raster value from the veg tiff map
-        double hostProb = 0;
-        int posGridX; //grid x in veg map
-        int posGridY; //grid y in veg map
-        try {
-            posGridX = CoordinateConverter.coordToGrid(state.crsPrHost, state.ggHost, coordX, coordY)[0]; //convert lon to gridx
-            posGridY = CoordinateConverter.coordToGrid(state.crsPrHost, state.ggHost, coordX, coordY)[1]; //convert lat to gridy
-        } catch (TransformException e) {
-            throw new RuntimeException(e);
-        }
-        hostRasterValue = vegHost.valueAtGrid(posGridX, posGridY); //this value either represents a value of probability (outside a patch) or a patchID
-        if(hostRasterValue > 100000) { //means this cell is not a patch
-            hostProb = (hostRasterValue - 100000) / 100 ;
-        } else { //this cell is in a patch
-            int mapCode = vegInfo.get(hostRasterValue).mapCode;
-            double pWillowSum = vegInfo.get(hostRasterValue).pTrWillow + vegInfo.get(hostRasterValue).pShWillowM;
-            if(mapCode <= 217 && mapCode >= 111) { //the dominant vegetation is the host species
-                hostProb = 1.0;
-            }  else if (pWillowSum > 0){
-                hostProb = -4.5 + pWillowSum * 15.25;
-            } else if (pWillowSum == 0) {
-                hostProb = 0;
+
+    public double getVegMapPrHost(PSHBEnvironment state, double coordX, double coordY)
+            throws TransformException, IOException {
+
+        int posGridX = CoordinateConverter.coordToGrid(state.crsPrHost, state.ggHost, coordX, coordY)[0];
+        int posGridY = CoordinateConverter.coordToGrid(state.crsPrHost, state.ggHost, coordX, coordY)[1];
+
+        double hostRasterValue = vegHost.valueAtGrid(posGridX, posGridY);
+        System.out.println("hostRasterValue: " + hostRasterValue);
+        if (hostRasterValue >= 100000) {
+            double prob = (hostRasterValue - 100000) / 100.0;
+            System.out.println("host prob: " + prob);
+            return prob;
+        } else {
+            int patchID = (int) hostRasterValue;
+            System.out.println("patchID: " + patchID);
+            if (patchID != 0 && vegInfo.containsKey(patchID)) {
+                int mapCode = vegInfo.get(patchID).mapCode;
+                double pWillowSum = vegInfo.get(patchID).pTrWillow + vegInfo.get(patchID).pShWillowM;
+
+                if (mapCode <= 217 && mapCode >= 111) return 1.0;
+                if (pWillowSum > 0) return -4.5 + pWillowSum * 15.25;
+                return 0.0;
+            } else {
+                //outside the study area
+                return -1;
             }
+
         }
-        return hostProb;
     }
-    //update: 2026-02-03
-    public double getVegMapPrRepr(PSHBEnvironment state, double coordX, double coordY) throws TransformException, IOException {
-        String vegAttributeInfo = OutputWriter.getFileName("RESET_PSHB_inputData/RESET_merge_attributes.csv", true);
-        VegAttributesLoader attributesLoader = new VegAttributesLoader(vegAttributeInfo); //initiate a new VegAttributeLoader class
-        Map<Integer, VegAttributes> vegInfo = attributesLoader.getVegInformation(); //get all vegetation attributes information
-        double pixelValue = 0;
-        double reprProb = 0;
-        int posGridX;
-        int posGridY;
-        try {
-            posGridX = CoordinateConverter.coordToGrid(state.crsPrRepr, state.ggRepr, coordX, coordY)[0]; //convert lon to gridx
-            posGridY = CoordinateConverter.coordToGrid(state.crsPrRepr, state.ggRepr, coordX, coordY)[1]; //convert lat to gridy
-        } catch (TransformException e) {
-            throw new RuntimeException(e);
+
+    public double getVegMapPrRepr(PSHBEnvironment state, double coordX, double coordY)
+            throws TransformException, IOException {
+
+//        String vegAttributeInfo = OutputWriter.getFileName("RESET_PSHB_inputData/RESET_merge_attributes.csv", true);
+//        VegAttributesLoader attributesLoader = new VegAttributesLoader(vegAttributeInfo);
+//        Map<Integer, VegAttributes> vegInfo = attributesLoader.getVegInformation();
+
+        int posGridX = CoordinateConverter.coordToGrid(state.crsPrRepr, state.ggRepr, coordX, coordY)[0];
+        int posGridY = CoordinateConverter.coordToGrid(state.crsPrRepr, state.ggRepr, coordX, coordY)[1];
+
+        double pixelValue = vegRepr.valueAtGrid(posGridX, posGridY);
+
+        if (pixelValue >= 100000) {
+            return (pixelValue - 100000) / 100.0;
+        } else {
+            int patchID = (int) pixelValue;
+            int mapCode = vegInfo.get(patchID).mapCode;
+            double pWillowSum = vegInfo.get(patchID).pTrWillow + vegInfo.get(patchID).pShWillowM;
+
+            if (mapCode == 217 || mapCode == 215) return 0.0;
+            if (mapCode < 217 && mapCode >= 111 && mapCode != 215) return 1.0;
+            if (pWillowSum > 0) return 1.0;
+            return 0.0;
         }
-        pixelValue = vegRepr.valueAtGrid(posGridX, posGridY);
-        if(pixelValue > 100000) { //this cell is not in a patch
-            reprProb = (pixelValue - 100000) / 100 ;
-        } else { //this cell is in a patch
-            int mapCode = vegInfo.get(pixelValue).mapCode;
-            double pWillowSum = vegInfo.get(pixelValue).pTrWillow + vegInfo.get(pixelValue).pShWillowM;
-            if(mapCode == 217 || mapCode == 215) { //the dominant vegetation is the host species
-                reprProb = 0.0;
-            }  else if (mapCode < 217 && mapCode >= 111 && mapCode != 215){
-                reprProb = 1.0;
-            } else if (pWillowSum > 0){
-                reprProb = 1.0;
-            } else if (pWillowSum == 0) {
-                reprProb = 0;
-            }
-        }
-        return reprProb;
     }
+
 
     public PSHBVegCell getVegCell(int vegGridX, int vegGridY) {
         String mapKEy = String.join("-", String.valueOf(vegGridX), String.valueOf(vegGridY));

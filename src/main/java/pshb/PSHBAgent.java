@@ -388,6 +388,15 @@ public class PSHBAgent implements Steppable {
         //calculate the probability of attempting colonization
         probBasedOnRemainingTicks = (5 - pshbRemainingTicks) * 0.2; //(1) first multiplicand, section 7.3, i.e.,(1 - 0.2 * pshbRemainingTicks)
         mpPshbVegMapPrHost = state.getVegMapPrHost(state, this.longitudeX, this.latitudeY); //(2) second multiplicand - from veg map PrHost
+        if(mpPshbVegMapPrHost == -1) {
+            state.debugWriter.addToFile("This agent is outside the study area and die."); //log
+            state.numDeathInADULTCOL ++; //death counts in COLONIZATION Stage increased by one
+            state.numDeath ++; //death counts increased by one
+            this.actionExecuted = "outside study area and die";
+            death(state); //execute the death function
+            return;
+        }
+        System.out.println("probBasedOnRemainingTicks: " + probBasedOnRemainingTicks + "mpPshbVegMapPrHost: " + mpPshbVegMapPrHost);
         attemptingColonization = probBasedOnRemainingTicks * this.mpPshbVegMapPrHost; //attempting to colonize = (1) * (2)
         //success probability of colonization is obtained from the PrRepr
         mpPshbColSuccess = state.getVegMapPrRepr(state, this.longitudeX, this.latitudeY); //from veg map PrRepr

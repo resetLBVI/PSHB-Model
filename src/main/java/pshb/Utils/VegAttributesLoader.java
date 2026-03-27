@@ -1,9 +1,15 @@
 package pshb.Utils;
 
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
+
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,64 +29,172 @@ public class VegAttributesLoader {
         this.fileDirectory = fileDirectory;
     }
 
-    public Map<Integer, VegAttributes> getVegInformation(){
-        //read in files
-        List<String> lines; //read in data line by line, store as a String list
+
+    public Map<Integer, VegAttributes> getVegInformation() {
         path = Paths.get(fileDirectory);
-        try{
-            lines = Files.readAllLines(path); //read all lines
-            data = lines.stream().skip(1).map(line -> line.split(",")).collect(Collectors.toList()); //extract the data from lines
+
+        // Collect all problems
+        List<String> problems = new ArrayList<>();
+        Map<Integer, VegAttributes> vegInfoLocal = new HashMap<>();
+
+        try (BufferedReader reader = Files.newBufferedReader(path);
+             CSVParser parser = CSVFormat.DEFAULT
+                     .builder()
+                     .setHeader()
+                     .setSkipHeaderRecord(true)
+                     .setTrim(true)
+                     .build()
+                     .parse(reader)) {
+
+            for (CSVRecord r : parser) {
+                long rec = r.getRecordNumber();      // 1-based record count (data rows only)
+                int csvRow = (int) rec + 1;          // file row number (row 1 is header)
+
+                // We'll try to extract patchID as a string for better error messages
+                String patchRaw = safeGet(r, 0);
+                String xRaw = safeGet(r, 2);
+                String yRaw = safeGet(r, 3);
+
+                // ---- Required fields validation (collect errors) ----
+                Integer patchID = parseIntFlexible(patchRaw, csvRow, "patchID");
+                if (patchID == null) {
+                    problems.add("Row " + csvRow + " (record " + rec + "): patchID missing/invalid raw=[" + patchRaw + "]");
+                    continue; // can't key the map without patchID
+                }
+
+                Double xObj = parseDoubleSafe(xRaw);
+                if (xObj == null) {
+                    problems.add("Row " + csvRow + " (record " + rec + ", patchID=" + patchID + "): POINT_X missing/invalid raw=[" + xRaw + "]");
+                    continue;
+                }
+
+                Double yObj = parseDoubleSafe(yRaw);
+                if (yObj == null) {
+                    problems.add("Row " + csvRow + " (record " + rec + ", patchID=" + patchID + "): POINT_Y missing/invalid raw=[" + yRaw + "]");
+                    continue;
+                }
+
+                // Now safe to unbox
+                double pointX = xObj;
+                double pointY = yObj;
+
+                // ---- Optional fields (can be null) ----
+                Integer terrID    = parseIntFlexible(safeGet(r, 1), csvRow, "terrID");
+                Double gisAcres   = parseDoubleSafe(safeGet(r, 4));
+                Integer mapCode   = parseIntFlexible(safeGet(r, 5), csvRow, "mapCode");
+                String vegName    = safeGet(r, 6);
+
+                Double pTrWillow  = parseDoubleSafe(safeGet(r, 7));
+                Double pShWillowM = parseDoubleSafe(safeGet(r, 8));
+                Double pArundo    = parseDoubleSafe(safeGet(r, 9));
+                Double pTamarisk  = parseDoubleSafe(safeGet(r, 10));
+                Double pDieback   = parseDoubleSafe(safeGet(r, 11));
+                Double elevM      = parseDoubleSafe(safeGet(r, 12));
+                Double slopeP     = parseDoubleSafe(safeGet(r, 13));
+                String L1NetworkN = safeGet(r, 14);
+                Double sortOrder  = parseDoubleSafe(safeGet(r, 15));
+                String streamName = safeGet(r, 16);
+
+                Integer streamLeve = parseIntFlexible(safeGet(r, 17), csvRow, "streamLevel");
+                String reservoirO  = safeGet(r, 18);
+                Integer popID      = parseIntFlexible(safeGet(r, 19), csvRow, "popID");
+                String population  = safeGet(r, 20);
+
+                String huc6Name    = safeGet(r, 21);
+                String huc8Name    = safeGet(r, 22);
+                String huc10Name   = safeGet(r, 23);
+                String groundWate  = safeGet(r, 24);
+                String inSGMABasi  = safeGet(r, 25);
+
+                String management  = safeGet(r, 26);
+                String manageme1   = safeGet(r, 27);
+                String designatio  = safeGet(r, 28);
+                String manageme2   = safeGet(r, 29);
+
+                String countyName  = safeGet(r, 30);
+                String wwtpsubsid  = safeGet(r, 31);
+                String wwtpName    = safeGet(r, 32);
+
+                Double pLowQualit  = parseDoubleSafe(safeGet(r, 33));
+                Double shapeLeng   = parseDoubleSafe(safeGet(r, 34));
+                Double shapeArea   = parseDoubleSafe(safeGet(r, 35));
+
+                // If you want to enforce more "required" fields, validate them here and add to problems.
+
+                VegAttributes groupInfo = new VegAttributes(
+                        patchID, terrID, pointX, pointY, gisAcres, mapCode, vegName, pTrWillow,
+                        pShWillowM, pArundo, pTamarisk, pDieback, elevM, slopeP, L1NetworkN, sortOrder,
+                        streamName, streamLeve, reservoirO, popID, population, huc6Name, huc8Name, huc10Name,
+                        groundWate, inSGMABasi, management, manageme1, designatio, manageme2, countyName,
+                        wwtpsubsid, wwtpName, pLowQualit, shapeLeng, shapeArea
+                );
+
+                vegInfoLocal.put(patchID, groupInfo);
+            }
+
         } catch (IOException e) {
-//            throw new RuntimeException(e);
-            e.printStackTrace();
+            throw new RuntimeException("Failed to read veg attributes CSV: " + path.toAbsolutePath(), e);
+        }
+        if (!problems.isEmpty()) {
+            System.out.println("VegAttributes CSV validation warning: "
+                    + problems.size() + " bad row(s) skipped.");
+            System.out.println("File: " + path.toAbsolutePath());
+
+            for (int i = 0; i < Math.min(20, problems.size()); i++) {
+                System.out.println("  - " + problems.get(i));
+            }
+
+            if (problems.size() > 20) {
+                System.out.println("  ... (" + (problems.size() - 20) + " more not shown)");
+            }
         }
 
-        int index = 0;
-        //parse file information
-        for(String[] lst:data){
-            Integer patchID = Integer.valueOf(lst[0]); //1. key, patchID
-            Integer terrID = Integer.valueOf(lst[1]); //2. terrID
-            Double pointX = Double.valueOf(lst[2]); //3. POINT_X
-            Double pointY = Double.valueOf(lst[3]); //4. POINT_Y
-            Integer gisAcres = Integer.valueOf(lst[4]); //5. GISAcres
-            Integer mapCode = Integer.valueOf(lst[5]); //6. MapCode
-            String vegName = String.valueOf(lst[6]); //7. vegName
-            Double pTrWillow = Double.valueOf(lst[7]); //8. pTrWillow
-            Double pShWillowM = Double.valueOf(lst[8]); //9. pShWillowM
-            Double pArundo = Double.valueOf(lst[9]); //10.pArundo
-            Double pTamarisk = Double.valueOf(lst[10]); //11. pTamarisk
-            Double pDieback = Double.valueOf(lst[11]); //12. pDieback
-            Double elevM = Double.valueOf(lst[12]); //13. elevM
-            Double slopeP = Double.valueOf(lst[13]); //14. slopeP
-            String L1NetworkN = String.valueOf(lst[14]); //15. L1NetworkN
-            Double sortOrder = Double.valueOf(lst[15]); //16. sortOrder
-            String streamName = String.valueOf(lst[16]); //17. streamName
-            Integer streamLeve = Integer.valueOf(lst[17]); //18. streamLevel
-            String reservoirO = String.valueOf(lst[18]); //19. reservoirO
-            Integer popID = Integer.valueOf(lst[19]); //20. popID
-            String population = String.valueOf(lst[20]); //21. population
-            String huc6Name = String.valueOf(lst[21]); //22. huc6Name
-            String huc8Name = String.valueOf(lst[22]); //23. huc8Name
-            String huc10Name = String.valueOf(lst[23]); //24. huc10Name
-            String groundWate = String.valueOf(lst[24]); //25. groundWater
-            String inSGMABasi = String.valueOf(lst[25]); //26. inSGMABasin
-            String management = String.valueOf(lst[26]); //27. management
-            String manageme1 = String.valueOf(lst[27]); //28. management_1
-            String designatio = String.valueOf(lst[28]); //29. designatio
-            String manageme2 = String.valueOf(lst[29]); //30. management_2
-            String countyName = String.valueOf(lst[30]); //31. countyName
-            String wwtpsubsid = String.valueOf(lst[31]); //32. WWTPSubside
-            String wwtpName = String.valueOf(lst[32]); //33. WWTPName
-            Double pLowQualit = Double.valueOf(lst[33]); //34. PLowQuality
-            Double shapeLeng = Double.valueOf(lst[34]); //35. shape_Length
-            Double shapeArea = Double.valueOf(lst[35]); //36. shape_Area
-            VegAttributes groupInfo = new VegAttributes(patchID, terrID, pointX, pointY, gisAcres, mapCode, vegName, pTrWillow,
-                    pShWillowM, pArundo, pTamarisk, pDieback, elevM, slopeP, L1NetworkN, sortOrder, streamName, streamLeve,
-                    reservoirO, popID, population, huc6Name, huc8Name, huc10Name, groundWate, inSGMABasi, management,
-                    manageme1, designatio, manageme2, countyName, wwtpsubsid, wwtpName, pLowQualit, shapeLeng, shapeArea); //create an vegAttibutes infoIdentifier called groupInfo from input data
-            this.vegInfo.put(patchID, groupInfo); //add an index for each row
-        }
+
+        // If everything is good, update the instance map and return it
+        this.vegInfo.clear();
+        this.vegInfo.putAll(vegInfoLocal);
         return this.vegInfo;
-
     }
+
+    /**
+     * Safe getter: returns "" instead of throwing if column missing.
+     * (With Commons CSV and correct file, you usually won't hit missing columns,
+     *  but this keeps error reporting graceful.)
+     */
+    private static String safeGet(CSVRecord r, int idx) {
+        if (idx >= r.size()) return "";
+        String v = r.get(idx);
+        return v == null ? "" : v.trim();
+    }
+
+    private static Integer parseIntFlexible(String s, int row, String colName) {
+        if (s == null) return null;
+        s = s.trim();
+        if (s.isEmpty() || s.equalsIgnoreCase("NA") || s.equalsIgnoreCase("null")) return null;
+
+        try {
+            return Integer.valueOf(s);
+        } catch (NumberFormatException e) {
+            // if it's a decimal like "1.5807", parse as double then convert
+            try {
+                double d = Double.parseDouble(s);
+                return (int) Math.round(d);   // or (int) Math.floor(d)
+            } catch (NumberFormatException e2) {
+                throw new NumberFormatException(
+                        "Row " + row + " col " + colName + " cannot be parsed as int: [" + s + "]"
+                );
+            }
+        }
+    }
+
+    private static Double parseDoubleSafe(String s) {
+        if (s == null) return null;
+        s = s.trim();
+        if (s.isEmpty() || s.equalsIgnoreCase("NA") || s.equalsIgnoreCase("null")) return null;
+        return Double.valueOf(s);
+    }
+
+
+
+
 }
