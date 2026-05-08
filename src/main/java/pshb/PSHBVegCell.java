@@ -58,7 +58,15 @@ PSHBVegCell implements Steppable {
     public void death(PSHBEnvironment state) {
         this.numColonizedAgents = 0;
         event.stop();
+        // Sever back-references from each member agent before clearing
+        for (int i = 0; i < members.numObjs; i++) {
+            ((PSHBAgent) members.objs[i]).pshbHostCell = null;
+        }
         members.clear();
+        // Remove the cell itself from all environment collections so it can be GC'd
+        state.agentColonizedGrid.remove(this);
+        state.agentDevelopGrid.remove(this);
+        state.vegMapCell.remove(String.join("-", String.valueOf(this.vegGridX), String.valueOf(this.vegGridY)));
     }
 
     /*

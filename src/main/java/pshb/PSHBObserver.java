@@ -24,7 +24,7 @@ public class PSHBObserver implements Steppable {
      */
     public void collectPopData(PSHBEnvironment state) {
         //start writing
-        System.out.println("currentWeek for population data " + state.currentWeek);
+        System.out.println("currentWeek for population data : " + state.currentWeek);
         state.populationSize = state.agentDevelopGrid.getAllObjects().size();
         String popInfo = String.format("%s,%s,%s,%s,%s,%s,%s",
                 state.currentYear, state.populationSize, state.numBirth, state.numDeath, state.numDeathInLARVA, state.numDeathInADULTDISP,

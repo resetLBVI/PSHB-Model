@@ -72,13 +72,15 @@ public class PSHBAgent implements Steppable {
         this.longitudeX = longitudeX; //longitude ie. pshbLong
         this.latitudeY = latitudeY; //latitude ie. pshbLat
         //transform to temperature grid, vegetation grid, and display grid
-        this.tempGridX = CoordinateConverter.longitudeXToGridX(longitudeX, state.xllcornerTemp, state.tempCellSize);
-        this.tempGridY = CoordinateConverter.latitudeYToGridY(latitudeY, state.yllcornerTemp, state.tempCellSize, state.nRowsTemp);
-        this.vegGridX = CoordinateConverter.longitudeXToGridX(longitudeX, state.xllcornerVeg, state.vegCellSize);
-        this.vegGridY = CoordinateConverter.latitudeYToGridY(latitudeY, state.yllcornerVeg, state.vegCellSize, state.nRowsVeg);
         try {
+            this.tempGridX = CoordinateConverter.coordToGrid(state.weekCRS, state.weekGG, longitudeX, latitudeY)[0]; //convert lon to gridx in the veg map
+            this.tempGridY = CoordinateConverter.coordToGrid(state.weekCRS, state.weekGG, longitudeX, latitudeY)[1]; //convert lat to gridy in the veg map
+            this.vegGridX = CoordinateConverter.coordToGrid(state.crsPrHost, state.ggHost, longitudeX, latitudeY)[0];
+            this.vegGridY = CoordinateConverter.coordToGrid(state.crsPrHost, state.ggHost, longitudeX, latitudeY)[1];
             this.displayX = tempGridX * state.agentDisplayGrid.getWidth() / state.tempService.getWidth(1);
             this.displayY = tempGridY * state.agentDisplayGrid.getHeight() / state.tempService.getHeight(1);
+        } catch (TransformException e) {
+            throw new RuntimeException("Coordinate conversion failed in PSHBAgent constructor", e);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -232,6 +234,7 @@ public class PSHBAgent implements Steppable {
         } else { // not want to stay, dispersal anyway
             this.actionExecuted = "not stay do dispersal";
             dispersal(state); //execute the dispersal sub-model
+            this.pshbStage = Stage.ADULTCOL; //debug: 2026-04-08
         }
         this.pshbLongevUsed ++; //the age is increased by one
     }
@@ -248,8 +251,6 @@ public class PSHBAgent implements Steppable {
         }
         try { //block contains code that might throw an exception (i.e., an error during runtime) to avoid crash
             colonization(state); //execute the colonization function
-        } catch (TransformException e) {
-            throw new RuntimeException(e); //signal that an exception should be thrown
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -374,7 +375,7 @@ public class PSHBAgent implements Steppable {
     * ************************************************************************************
      */
 
-    public void colonization(PSHBEnvironment state) throws TransformException, IOException {
+    public void colonization(PSHBEnvironment state) throws IOException {
         //check if reaching lifespan
         this.pshbRemainingTicks = this.pshbLongev - this.pshbLongevUsed; //how many ticks remaining in the current date
         if(this.pshbRemainingTicks <= 0) {
@@ -387,7 +388,11 @@ public class PSHBAgent implements Steppable {
         }
         //calculate the probability of attempting colonization
         probBasedOnRemainingTicks = (5 - pshbRemainingTicks) * 0.2; //(1) first multiplicand, section 7.3, i.e.,(1 - 0.2 * pshbRemainingTicks)
-        mpPshbVegMapPrHost = state.getVegMapPrHost(state, this.longitudeX, this.latitudeY); //(2) second multiplicand - from veg map PrHost
+        try {
+            mpPshbVegMapPrHost = state.getVegMapPrHost(state, this.longitudeX, this.latitudeY); //(2) second multiplicand - from veg map PrHost
+        } catch (TransformException e) {
+            throw new RuntimeException("Coordinate conversion failed in colonization (getVegMapPrHost)", e);
+        }
         if(mpPshbVegMapPrHost == -1) {
             state.debugWriter.addToFile("This agent is outside the study area and die."); //log
             state.numDeathInADULTCOL ++; //death counts in COLONIZATION Stage increased by one
@@ -396,10 +401,14 @@ public class PSHBAgent implements Steppable {
             death(state); //execute the death function
             return;
         }
-        System.out.println("probBasedOnRemainingTicks: " + probBasedOnRemainingTicks + "mpPshbVegMapPrHost: " + mpPshbVegMapPrHost);
+        System.out.println("probBasedOnRemainingTicks: " + probBasedOnRemainingTicks + "    mpPshbVegMapPrHost: " + mpPshbVegMapPrHost);
         attemptingColonization = probBasedOnRemainingTicks * this.mpPshbVegMapPrHost; //attempting to colonize = (1) * (2)
         //success probability of colonization is obtained from the PrRepr
-        mpPshbColSuccess = state.getVegMapPrRepr(state, this.longitudeX, this.latitudeY); //from veg map PrRepr
+        try {
+            mpPshbColSuccess = state.getVegMapPrRepr(state, this.longitudeX, this.latitudeY); //from veg map PrRepr
+        } catch (TransformException e) {
+            throw new RuntimeException("Coordinate conversion failed in colonization (getVegMapPrRepr)", e);
+        }
         state.debugWriter.addToFile("the attempting colonization probability = " + attemptingColonization);
         state.debugWriter.addToFile("the colonization sucess probability = " + mpPshbColSuccess);
         //attempt to colonize
@@ -441,9 +450,14 @@ public class PSHBAgent implements Steppable {
         }
     }
 
-    public void  colonizeAHost(PSHBEnvironment state, double lon, double lat) throws TransformException {
+    public void  colonizeAHost(PSHBEnvironment state, double lon, double lat) {
         //convert lon and lat into veg map grid coordiantes
-        int[] grid = CoordinateConverter.coordToGrid(state.crsPrHost, state.ggHost, lon, lat);
+        int[] grid;
+        try {
+            grid = CoordinateConverter.coordToGrid(state.crsPrHost, state.ggHost, lon, lat);
+        } catch (TransformException e) {
+            throw new RuntimeException("Coordinate conversion failed in colonizeAHost", e);
+        }
         vegGridX = grid[0]; //convert lon to gridx in the veg map
         vegGridY = grid[1]; //convert lat to gridy in the veg map
         displayX = vegGridX * state.agentDisplayGrid.getWidth() / state.vegHost.getWidth();
@@ -479,7 +493,7 @@ public class PSHBAgent implements Steppable {
     *                       REPRODUCTION
     * ***********************************************************************
      */
-    public void reproduce(PSHBEnvironment state, PSHBAgent parent){
+    public void reproduce(PSHBEnvironment state, PSHBAgent parent) {
         double coordX_newborn = parent.longitudeX; //define the newborn's x location as parents'
         double coordY_newborn = parent.latitudeY; //define the newborn's y location as parents'
         this.pshbSpawn = Calculation.getPoisson(state.mpPshbSpawn); //everytime will be different?
@@ -540,8 +554,16 @@ public class PSHBAgent implements Steppable {
                 this.locationData.get("latAtBirth"), this.locationData.get("lonAtDeath"), this.locationData.get("latAtDeath"),
                 this.stageData.get("deathStage"), this.ageData.get("deathAge"));
         state.agentSummaryWriter.addToFile(lifeHistoryInfo); //add the information into file
-        //stop the event
+        // Remove from host cell's member bag so the cell doesn't hold a dead-agent reference
+        if (this.pshbHostCell != null) {
+            this.pshbHostCell.members.remove(this);
+            this.pshbHostCell.numColonizedAgents = this.pshbHostCell.members.numObjs;
+            this.pshbHostCell = null;
+        }
+        //stop the event and remove from all grids
         event.stop();
+        state.agentDevelopGrid.remove(this);
+        state.agentDisplayGrid.remove(this);
     }
 
 }

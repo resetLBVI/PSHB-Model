@@ -15,15 +15,15 @@ import org.geotools.geometry.jts.ReferencedEnvelope;
  */
 public class CoordinateConverter {
 
-    public static int longitudeXToGridX(Double longitudeX, double xllcorner, int cellSize){
-        int x = (int) (longitudeX - xllcorner)/ cellSize;
-        return x;
-    }
-
-    public static int latitudeYToGridY(Double latitudeY, double yllcorner, int cellSize, int nRows){
-        int y = (int) (yllcorner + cellSize * nRows - latitudeY)/ cellSize;
-        return y;
-    }
+//    public static int longitudeXToGridX(Double longitudeX, double xllcorner, int cellSize){
+//        int x = (int) (longitudeX - xllcorner)/ cellSize;
+//        return x;
+//    }
+//
+//    public static int latitudeYToGridY(Double latitudeY, double yllcorner, int cellSize, int nRows){
+//        int y = (int) (yllcorner + cellSize * nRows - latitudeY)/ cellSize;
+//        return y;
+//    }
 
 
     // convert lon/lat gps coordinates to tiff x/y coordinates x=lon; y=lat

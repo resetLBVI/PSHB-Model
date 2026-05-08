@@ -26,7 +26,24 @@ public class PSHBEnvironment extends SimState {
         System.setProperty("org.geotools.coverage.grid.io.imageio.MaskOverviewProvider.spi.disable", "true");
         System.setProperty("org.geotools.coverage.grid.io.imageio.mask.overviews.enabled", "false");
 
-        
+        // Cap the JAI/ImageN tile cache to 256 MB so raster tiles don't fill the heap.
+        // The raster reads in LazyVegGeoTiff and WeeklyTempService accumulate tiles
+        // across the entire 23k-row vegetation grid; without a cap the cache grows unbounded.
+        long tileCacheBytes = 256L * 1024 * 1024;
+        capTileCache("javax.media.jai.JAI", tileCacheBytes);       // legacy JAI path
+        capTileCache("org.eclipse.imagen.JAI", tileCacheBytes);    // Eclipse ImageN path (GeoTools 34+)
+    }
+
+    private static void capTileCache(String jaiClassName, long bytes) {
+        try {
+            Class<?> jai   = Class.forName(jaiClassName);
+            Object instance = jai.getMethod("getDefaultInstance").invoke(null);
+            Object cache    = jai.getMethod("getTileCache").invoke(instance);
+            cache.getClass().getMethod("setMemoryCapacity", long.class).invoke(cache, bytes);
+            System.out.printf("Tile cache capped at %d MB via %s%n", bytes / (1024 * 1024), jaiClassName);
+        } catch (Exception ignored) {
+            // This JAI variant is not on the classpath — that's fine.
+        }
     }
     Path currentRelativePath = Paths.get("");
     String projectPath = currentRelativePath.toAbsolutePath().toString();
@@ -156,6 +173,11 @@ public class PSHBEnvironment extends SimState {
         if (tempService != null) {
             try { tempService.close(); } catch (Exception ignored) {}
         }
+        if (debugWriter      != null) debugWriter.close();
+        if (logWriter        != null) logWriter.close();
+        if (agentSummaryWriter != null) agentSummaryWriter.close();
+        if (popSummaryWriter != null) popSummaryWriter.close();
+        if (impactWriter     != null) impactWriter.close();
     }
 
     // ------------------------------------------------------------------------------------
@@ -261,8 +283,8 @@ public class PSHBEnvironment extends SimState {
     }
 
     public void importTiffVegRasterMaps() throws Exception {
-        String hostPrFileName = OutputWriter.getFileName("RESET_PSHB_inputData/VegRaster_PrHost_20240730.tif", true).replace("%20", " ");
-        String reprPrFileName = OutputWriter.getFileName("RESET_PSHB_inputData/VegRaster_PrRepr_20240730.tif", true).replace("%20", " ");
+        String hostPrFileName = OutputWriter.getFileName("RESET_PSHB_inputData/inVegRaster_PrHost_20260429.tif", true).replace("%20", " ");
+        String reprPrFileName = OutputWriter.getFileName("RESET_PSHB_inputData/inVegRaster_PrRepr_20260429.tif", true).replace("%20", " ");
 
         File tiffVegRaster_PrHost = new File(hostPrFileName);
         File tiffVegRaster_PrRepr = new File(reprPrFileName);
@@ -371,45 +393,77 @@ public class PSHBEnvironment extends SimState {
             return prob;
         } else {
             int patchID = (int) hostRasterValue;
-            System.out.println("patchID: " + patchID);
             if (patchID != 0 && vegInfo.containsKey(patchID)) {
                 int mapCode = vegInfo.get(patchID).mapCode;
                 double pWillowSum = vegInfo.get(patchID).pTrWillow + vegInfo.get(patchID).pShWillowM;
-
-                if (mapCode <= 217 && mapCode >= 111) return 1.0;
-                if (pWillowSum > 0) return -4.5 + pWillowSum * 15.25;
-                return 0.0;
+//                double pWillowSum = 0.3;
+                if(mapCode <= 217 && mapCode >= 111) { //debug: 2026-04-22
+                    System.out.println("mpPshbVegMapPrHost:" + 1.0);
+                    return 1.0;
+                } else { //doesn't have major vegetation type, so check the secondary type
+                    if (pWillowSum > 0) {
+                        double prob = (-4.5 + pWillowSum * 15.25) / 100;
+                        System.out.println("pWillowSum: " + pWillowSum);
+                        System.out.println("mpPshbVegMapPrHost:" + prob);
+                        return prob;
+                    } else { //doesn't contain secondary veg types
+                        System.out.println("mpPshbVegMapPrHost:" + 0.0);
+                        return 0.0;
+                    }
+                }
             } else {
                 //outside the study area
                 return -1;
             }
-
         }
     }
 
+    /**
+     * This function gets the probabilities from the "VegRaster_PrRepr_20240730" to obtain the probability
+     * of successfully overcoming the tree’s defenses, mpPshbColSuccess.
+     * @param state
+     * @param coordX
+     * @param coordY
+     * @return
+     * @throws TransformException
+     * @throws IOException
+     */
     public double getVegMapPrRepr(PSHBEnvironment state, double coordX, double coordY)
             throws TransformException, IOException {
-
-//        String vegAttributeInfo = OutputWriter.getFileName("RESET_PSHB_inputData/RESET_merge_attributes.csv", true);
-//        VegAttributesLoader attributesLoader = new VegAttributesLoader(vegAttributeInfo);
-//        Map<Integer, VegAttributes> vegInfo = attributesLoader.getVegInformation();
 
         int posGridX = CoordinateConverter.coordToGrid(state.crsPrRepr, state.ggRepr, coordX, coordY)[0];
         int posGridY = CoordinateConverter.coordToGrid(state.crsPrRepr, state.ggRepr, coordX, coordY)[1];
 
-        double pixelValue = vegRepr.valueAtGrid(posGridX, posGridY);
+        double pixelValue = vegRepr.valueAtGrid(posGridX, posGridY); //reproRasterValue
 
         if (pixelValue >= 100000) {
-            return (pixelValue - 100000) / 100.0;
+            double prob = (pixelValue - 100000) / 100.0;
+            System.out.println("repro prob: " + (pixelValue - 100000) / 100.0);
+            return prob;
         } else {
             int patchID = (int) pixelValue;
             int mapCode = vegInfo.get(patchID).mapCode;
-            double pWillowSum = vegInfo.get(patchID).pTrWillow + vegInfo.get(patchID).pShWillowM;
-
-            if (mapCode == 217 || mapCode == 215) return 0.0;
-            if (mapCode < 217 && mapCode >= 111 && mapCode != 215) return 1.0;
-            if (pWillowSum > 0) return 1.0;
-            return 0.0;
+//            double pWillowSum = vegInfo.get(patchID).pTrWillow + vegInfo.get(patchID).pShWillowM;
+            double pWillowSum = 0.3;
+            //debug: 2026-04-22
+            if (patchID != 0 && vegInfo.containsKey(patchID)) {
+                if(mapCode <= 217 && mapCode >= 111) { //check primary veg type
+                    if (mapCode == 215 || mapCode == 217) {
+                        return 0.0;
+                    } else {
+                        return 1.0;
+                    }
+                } else { //doesn't have major vegetation type, so check the secondary type
+                    if (pWillowSum > 0) {
+                        return 1.0;
+                    } else { //doesn't contain secondary veg types
+                        return 0.0;
+                    }
+                }
+            } else {
+                //outside the study area
+                return -1;
+            }
         }
     }
 

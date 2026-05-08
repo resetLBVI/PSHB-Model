@@ -2,6 +2,7 @@ package pshb;
 
 // Java
 import java.awt.Color;
+import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -13,7 +14,7 @@ import javax.imageio.ImageIO;
 import sim.field.grid.SparseGrid2D;
 import sim.portrayal.grid.FastValueGridPortrayal2D;
 import sim.portrayal.grid.SparseGridPortrayal2D;
-import sim.portrayal.simple.ImagePortrayal2D;
+
 
 // (optional, depending on your class)
 import sim.display.Display2D;      // if you reference Display2D
@@ -107,7 +108,7 @@ public class PSHBWorldWithUI extends GUIState {
         // 0) Get load filename
         String bgFileName;
         try {
-            bgFileName = OutputWriter.getFileName("/RESET_PSHB_inputData/RESET_model_UI_background-2.jpg", true);
+            bgFileName = OutputWriter.getFileName("/RESET_PSHB_inputData/RESET_model_UI_background_crop.jpg", true);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -142,14 +143,25 @@ public class PSHBWorldWithUI extends GUIState {
 
         SparseGrid2D bgGrid = new SparseGrid2D(W, H);
         Object token = new Object();
-        // Put token at the center so the image expands around it
-        bgGrid.setObjectLocation(token, W / 2, H / 2);
+        // Put token at (0,0) — custom portrayal uses draw.x/y as the top-left origin
+        bgGrid.setObjectLocation(token, 0, 0);
 
         // 3) Tell the background portrayal about the field AND how to draw that token
         backgroundPortrayal.setField(bgGrid);
-        // IMPORTANT: scale in ImagePortrayal2D is relative to a *cell*.
-        // Using W makes the image span ~the full width of the grid.
-        backgroundPortrayal.setPortrayalForAll(new ImagePortrayal2D(bg, (double) W));
+        // Draw image to fill exactly W x H cells, avoiding ImagePortrayal2D's half-cell offset
+        backgroundPortrayal.setPortrayalForAll(new sim.portrayal.SimplePortrayal2D() {
+            @Override
+            public void draw(Object object, Graphics2D graphics, sim.portrayal.DrawInfo2D info) {
+                // info.draw.x/y = top-left pixel of cell (0,0)
+                // info.draw.width/height = one cell's pixel size
+                int x = (int) info.draw.x;
+                int y = (int) info.draw.y;
+                int w = (int) (info.draw.width  * W);
+                int h = (int) (info.draw.height * H);
+                graphics.drawImage(bg, x, y, x + w, y + h,
+                        0, 0, bg.getWidth(), bg.getHeight(), null);
+            }
+        });
 
         // 4) Agents layer
         PSHBAgentPortrayal.setField(eState.agentDisplayGrid);
