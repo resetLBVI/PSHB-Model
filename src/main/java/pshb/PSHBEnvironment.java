@@ -152,7 +152,6 @@ public class PSHBEnvironment extends SimState {
         // 4) Schedule timer (updates week/year + maybe rolls temp week)
         PSHBTimer systemTimer = new PSHBTimer();
         schedule.scheduleRepeating(Schedule.EPOCH, 0, systemTimer);
-
         // 5) Make initial agents
         try {
             makeAgentsInSpace();
@@ -371,7 +370,7 @@ public class PSHBEnvironment extends SimState {
         double hostRasterValue = 0;
         int patchID = 0;
         hostRasterValue = vegHost.valueAtGrid(vegGridX, vegGridY);
-        if(hostRasterValue > 100000) { //not a patch
+        if(hostRasterValue >= 100000) { //not a patch
             return patchID = 0;
         } else { //it's a patch, return the patchID
             patchID = (int) hostRasterValue;

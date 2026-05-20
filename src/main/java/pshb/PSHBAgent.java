@@ -89,7 +89,7 @@ public class PSHBAgent implements Steppable {
         this.pshbDegDays = 0; //the counts of the degree-days
         this.pshbSonDegDays = 0; // the counts of son's degree-days
 
-        this.patchID = 0;
+        this.patchID = state.getPatchID(state, this.vegGridX, this.vegGridY);
         this.pshbMated = false; //indicate if the agent is mated or unmated
         this.pshbLongev = state.random.nextInt(3) + 1; //state an agent's longevity in adult stages (in steps/weeks)
         this.pshbLongevUsed = 0; //countdown of an agent's longevity in the adult stages
@@ -224,6 +224,7 @@ public class PSHBAgent implements Steppable {
         //should I stay? Determine if this agent will stay in the cell
         if(state.random.nextBoolean(state.mpPshbShouldIStay)){ //yes, the agent wants to stay, but need to check if the cell is available
             if(state.getVegCell(this.vegGridX, this.vegGridY) == null || state.getVegCell(this.vegGridX, this.vegGridY).deadVegetation == false) {
+                this.patchID = state.getPatchID(state, this.vegGridX, this.vegGridY); //2026-05-20 update patchID for the agent
                 this.pshbStage = Stage.ADULTCOL; //the cell is available, stay in this cell and move forward into ADULTCOL stage
                 this.actionExecuted = "stay in same loc and ready for ADULTCOL";
             } else { //the cell is not available
@@ -356,11 +357,14 @@ public class PSHBAgent implements Steppable {
             try {
                 tempGridX = CoordinateConverter.coordToGrid(state.weekCRS, state.weekGG, longitudeX, latitudeY)[0]; //convert lon to gridx in the veg map
                 tempGridY = CoordinateConverter.coordToGrid(state.weekCRS, state.weekGG, longitudeX, latitudeY)[1]; //convert lat to gridy in the veg map
+                vegGridX = CoordinateConverter.coordToGrid(state.crsPrHost, state.ggHost, longitudeX, latitudeY)[0]; //update veg grid x after dispersal
+                vegGridY = CoordinateConverter.coordToGrid(state.crsPrHost, state.ggHost, longitudeX, latitudeY)[1]; //update veg grid y after dispersal
                 displayX = tempGridX * state.agentDisplayGrid.getWidth() / state.tempService.getWidth(1);
                 displayY = tempGridY * state.agentDisplayGrid.getHeight() / state.tempService.getHeight(1);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
+            this.patchID = state.getPatchID(state, this.vegGridX, this.vegGridY); //update patchID after dispersal
             state.agentDevelopGrid.setObjectLocation(this, tempGridX, tempGridY); //set the agent at the location
             state.agentDisplayGrid.setObjectLocation(this, displayX, displayY); //show the new location on display
             state.debugWriter.addToFile("This agent has dispersed to lon: "    + this.longitudeX+ "   lat:  " + this.latitudeY); //check the location after movement
@@ -460,6 +464,7 @@ public class PSHBAgent implements Steppable {
         }
         vegGridX = grid[0]; //convert lon to gridx in the veg map
         vegGridY = grid[1]; //convert lat to gridy in the veg map
+        this.patchID = state.getPatchID(state, vegGridX, vegGridY); //update patchID after colonizing a host
         displayX = vegGridX * state.agentDisplayGrid.getWidth() / state.vegHost.getWidth();
         displayY = vegGridY * state.agentDisplayGrid.getHeight() / state.vegHost.getHeight();
         //Only the cells within the patch got tracked
