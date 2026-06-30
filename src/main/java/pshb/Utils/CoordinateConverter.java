@@ -15,15 +15,18 @@ import org.geotools.geometry.jts.ReferencedEnvelope;
  */
 public class CoordinateConverter {
 
-//    public static int longitudeXToGridX(Double longitudeX, double xllcorner, int cellSize){
-//        int x = (int) (longitudeX - xllcorner)/ cellSize;
-//        return x;
-//    }
-//
-//    public static int latitudeYToGridY(Double latitudeY, double yllcorner, int cellSize, int nRows){
-//        int y = (int) (yllcorner + cellSize * nRows - latitudeY)/ cellSize;
-//        return y;
-//    }
+    // col = floor((x - xllcorner) / cellSize)
+    // xllcorner is the western (left) edge of the raster, raw corner coordinate (no +halfCell offset)
+    public static int longitudeXToGridX(double x, double xllcorner, int cellSize) {
+        return (int) Math.floor((x - xllcorner) / cellSize);
+    }
+
+    // row = floor((yllcorner + cellSize*nRows - y) / cellSize)
+    // rows increase downward, latitude increases upward, so we measure from the top edge
+    // yllcorner is the southern (bottom) edge; top edge = yllcorner + cellSize*nRows
+    public static int latitudeYToGridY(double y, double yllcorner, int cellSize, int nRows) {
+        return (int) Math.floor((yllcorner + (double) cellSize * nRows - y) / cellSize);
+    }
 
 
     // convert lon/lat gps coordinates to tiff x/y coordinates x=lon; y=lat

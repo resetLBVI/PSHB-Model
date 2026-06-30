@@ -1,0 +1,36 @@
+{
+  "_comment": "Parameter sweep configuration for PSHB model.",
+
+  "jar": "RESET_PSHB_2026-06-02.jar",
+
+  "seeds": [42, 123, 456],
+
+  "mode": "one_at_a_time",
+  "_mode_options": [
+    "one_at_a_time  : vary one parameter while all others stay at their default",
+    "full_factorial : run every combination of all sweep values (can be large!)"
+  ],
+
+  "_sweep_note": "First value of each list = baseline for one_at_a_time mode. Keep it aligned with PSHBEnvironment defaults.",
+  "sweep": {
+    "mpProbMate":          [0.65, 0.4, 0.5, 0.8],
+    "mpPshbMove":          [2300, 1000, 1500, 3000, 4000],
+    "mpPshbSpawn":         [5, 3, 7, 10],
+    "mpPshbShouldIStay":   [0.5, 0.2, 0.35, 0.65, 0.8],
+    "mpPshbMortLarva":     [0.01, 0.001, 0.005, 0.05],
+    "mpPshbMortAdultDisp": [0.01, 0.001, 0.005, 0.05]
+  },
+
+  "fixed": {
+    "mpPshbMortPreovi":    0.01,
+    "mpPshbMortAdultCol":  0.01,
+    "mpPshbDirStdDev":     30,
+    "weeklyOutput":        false
+  },
+
+  "heap": "8g",
+  "_heap_comment": "Max JVM heap per run (-Xmx). heap x parallel_jobs must stay under total RAM (32 GB).",
+
+  "parallel_jobs": 3,
+  "_parallel_comment": "Number of runs to execute in parallel. Set to 1 for sequential."
+}

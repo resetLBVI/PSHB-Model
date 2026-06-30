@@ -87,13 +87,13 @@ public class PSHBEnvironment extends SimState {
     int displayWidth = 100;
     int displayHeight = 100;
     //transformation
-    public double xllcornerTemp = -176101.065660700784 + 1500;
-    public double yllcornerTemp = -605553.288401709870 + 1500;
+    public double xllcornerTemp = -176101.065660700784;
+    public double yllcornerTemp = -605553.288401709870;
     public int tempCellSize = 3000;
     public int nRowsTemp = 172;
     //Coordination Converter: The following four variables are used in manually converting coordinates into grid system. Just in case the crs automation conversion not works
-    double xllcornerVeg = -194862 + 15;
-    double yllcornerVeg = -695325 + 15;
+    double xllcornerVeg = -194862;
+    double yllcornerVeg = -695325;
     int vegCellSize = 30;
     int nRowsVeg = 23518;
 
@@ -208,7 +208,7 @@ public class PSHBEnvironment extends SimState {
 
             // log
             String[] logHeader = {"currentStep", "currentWeek", "currentYear", "agentID", "Stage", "currentAge",
-                    "longitude", "latitude", "patchID", "actionExecuted"};
+                    "longitude", "latitude", "tempGridX", "tempGridY", "vegGridX", "vegGridY", "patchID", "actionExecuted"};
             String logPath = OutputWriter.getFileName(this.logFile, false);
             logWriter = new OutputWriter(logPath);
             logWriter.createFile(logHeader);
@@ -228,7 +228,7 @@ public class PSHBEnvironment extends SimState {
             popSummaryWriter.createFile(popSummaryHeader);
 
             // impact
-            String[] impactHeader = {"year", "week", "deadVegetation", "x", "y", "patchID"};
+            String[] impactHeader = {"year", "week", "deadVegetation", "vegGridX", "vegGridY", "patchID"};
             String impactPath = OutputWriter.getFileName(this.impactFile, false);
             impactWriter = new OutputWriter(impactPath);
             impactWriter.createFile(impactHeader);

@@ -145,9 +145,10 @@ public class PSHBAgent implements Steppable {
         //Step 2 : take actions, check the stages, and then perform the actions according to their stage
         takeAction(this.pshbStage, eState); //taking different actions based on the stages
         //Step 3: log File to record agent's behaviors in each step
-        String agentStepLog = String.format("%s,%s,%s,%s,%s,%s,%s,%s,%s,%s", currentStep, eState.currentWeek,
+        String agentStepLog = String.format("%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s", currentStep, eState.currentWeek,
                 eState.currentYear, this.pshbAgentID, this.pshbStage, this.pshbAge, this.longitudeX,
-                this.latitudeY, this.patchID, this.actionExecuted);
+                this.latitudeY, this.tempGridX, this.tempGridY, this.vegGridX, this.vegGridY, this.patchID,
+                this.actionExecuted);
         eState.logWriter.addToFile(agentStepLog);
         this.actionExecuted = "null"; //reset the action executed
         //Step 3: age increment by one
