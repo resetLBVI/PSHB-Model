@@ -47,6 +47,9 @@ public class PSHBEnvironment extends SimState {
     }
     Path currentRelativePath = Paths.get("");
     String projectPath = currentRelativePath.toAbsolutePath().toString();
+    // Master switch for verbose debug logging (debug.txt) and hot-path console prints.
+    // Keep false for normal/performance runs; flip to true to bring all debug output back.
+    public static final boolean DEBUG = false;
     //input and output files path
     public String debugFile = "RESET_PSHB_debug.txt";
     public String logFile = "logPSHBWeekly.csv";
@@ -179,16 +182,29 @@ public class PSHBEnvironment extends SimState {
         if (impactWriter     != null) impactWriter.close();
     }
 
+    /**
+     * Write a line to the debug log, but only when DEBUG logging is enabled.
+     * When DEBUG is false the debugWriter is never created, so this is a no-op
+     * and avoids any per-agent / per-step file I/O.
+     */
+    public void debugLog(String text) {
+        if (DEBUG && debugWriter != null) {
+            debugWriter.addToFile(text);
+        }
+    }
+
     // ------------------------------------------------------------------------------------
     // Initialization helpers
     // ------------------------------------------------------------------------------------
     private void initWriters() {
         try {
-            // debug
-            String[] debugHeader = {};
-            debugFile = OutputWriter.getFileName(this.debugFile, false);
-            debugWriter = new OutputWriter(debugFile);
-            debugWriter.createFile(debugHeader);
+            // debug (only created when DEBUG logging is enabled)
+            if (DEBUG) {
+                String[] debugHeader = {};
+                debugFile = OutputWriter.getFileName(this.debugFile, false);
+                debugWriter = new OutputWriter(debugFile);
+                debugWriter.createFile(debugHeader);
+            }
 
             // log
             String[] logHeader = {"currentStep", "currentWeek", "currentYear", "agentID", "Stage", "currentAge",
@@ -265,6 +281,7 @@ public class PSHBEnvironment extends SimState {
     }
 
     private void debugPrintTiffReaders() {
+        if (!DEBUG) return;
         for (Iterator<ImageReader> it = ImageIO.getImageReadersByFormatName("tiff"); it.hasNext(); ) {
             ImageReader r = it.next();
             System.out.println(" - " + r.getClass().getName());
@@ -288,9 +305,11 @@ public class PSHBEnvironment extends SimState {
         File tiffVegRaster_PrHost = new File(hostPrFileName);
         File tiffVegRaster_PrRepr = new File(reprPrFileName);
 
-        System.out.println("Trying to read: " + tiffVegRaster_PrHost.getAbsolutePath());
-        System.out.println("Exists? " + tiffVegRaster_PrHost.exists());
-        System.out.println("Can read? " + tiffVegRaster_PrHost.canRead());
+        if (DEBUG) {
+            System.out.println("Trying to read: " + tiffVegRaster_PrHost.getAbsolutePath());
+            System.out.println("Exists? " + tiffVegRaster_PrHost.exists());
+            System.out.println("Can read? " + tiffVegRaster_PrHost.canRead());
+        }
 
         // IMPORTANT: we do NOT call getRenderedImage().getData() anywhere.
         vegHost = new LazyVegGeoTiff(tiffVegRaster_PrHost); //primary host raster
@@ -385,10 +404,10 @@ public class PSHBEnvironment extends SimState {
         int posGridY = CoordinateConverter.coordToGrid(state.crsPrHost, state.ggHost, coordX, coordY)[1];
 
         double hostRasterValue = vegHost.valueAtGrid(posGridX, posGridY);
-        System.out.println("hostRasterValue: " + hostRasterValue);
+        if (DEBUG) System.out.println("hostRasterValue: " + hostRasterValue);
         if (hostRasterValue >= 100000) {
             double prob = (hostRasterValue - 100000) / 100.0;
-            System.out.println("host prob: " + prob);
+            if (DEBUG) System.out.println("host prob: " + prob);
             return prob;
         } else {
             int patchID = (int) hostRasterValue;
@@ -397,16 +416,16 @@ public class PSHBEnvironment extends SimState {
                 double pWillowSum = vegInfo.get(patchID).pTrWillow + vegInfo.get(patchID).pShWillowM;
 //                double pWillowSum = 0.3;
                 if(mapCode <= 217 && mapCode >= 111) { //debug: 2026-04-22
-                    System.out.println("mpPshbVegMapPrHost:" + 1.0);
+                    if (DEBUG) System.out.println("mpPshbVegMapPrHost:" + 1.0);
                     return 1.0;
                 } else { //doesn't have major vegetation type, so check the secondary type
                     if (pWillowSum > 0) {
                         double prob = (-4.5 + pWillowSum * 15.25) / 100;
-                        System.out.println("pWillowSum: " + pWillowSum);
-                        System.out.println("mpPshbVegMapPrHost:" + prob);
+                        if (DEBUG) System.out.println("pWillowSum: " + pWillowSum);
+                        if (DEBUG) System.out.println("mpPshbVegMapPrHost:" + prob);
                         return prob;
                     } else { //doesn't contain secondary veg types
-                        System.out.println("mpPshbVegMapPrHost:" + 0.0);
+                        if (DEBUG) System.out.println("mpPshbVegMapPrHost:" + 0.0);
                         return 0.0;
                     }
                 }
@@ -437,7 +456,7 @@ public class PSHBEnvironment extends SimState {
 
         if (pixelValue >= 100000) {
             double prob = (pixelValue - 100000) / 100.0;
-            System.out.println("repro prob: " + (pixelValue - 100000) / 100.0);
+            if (DEBUG) System.out.println("repro prob: " + (pixelValue - 100000) / 100.0);
             return prob;
         } else {
             int patchID = (int) pixelValue;

@@ -39,8 +39,9 @@ public class OutputWriter {
 
     public void addToFile(String text) {
         try {
+            // No per-write flush: BufferedWriter batches writes and is flushed on close().
+            // Flushing every line forces a synchronous disk sync and is a major slowdown.
             writer.write(text + "\n");
-            writer.flush();
         } catch (IOException e) {
             System.out.println("exception occurred when addToFile" + e);
         }

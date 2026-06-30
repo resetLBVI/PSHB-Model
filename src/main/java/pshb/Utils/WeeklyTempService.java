@@ -80,7 +80,7 @@ public final class WeeklyTempService implements AutoCloseable {
     /** Fast path if you already have raster grid indices. */
     //col = grid[0] = tempX, row = grid[1] = tempY
     public double getTempAtGrid(int week, int col, int row) throws Exception {
-        System.out.println("map week:" + week + " col:" + col + " row:" + row);
+        if (pshb.PSHBEnvironment.DEBUG) System.out.println("map week:" + week + " col:" + col + " row:" + row);
         Ctx c = ctx(week);
         synchronized (c) {
             if (col < 0 || row < 0 || col >= c.width || row >= c.height) {
