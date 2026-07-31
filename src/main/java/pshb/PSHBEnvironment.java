@@ -117,6 +117,7 @@ public class PSHBEnvironment extends SimState {
     public int mpPshbSpawn = 5; //the mean of a Poisson distribution from which the number of agents spawned is drawn
     //data collection
     public boolean mpPshbWeeklyOutput = false; //when false, collect the data annually, otherwise, collect the data weekly
+    public boolean mpWeeklyLog = false; //when false, skip writing logPSHBWeekly.csv entirely (saves disk and memory)
     //Scheduling
     int currentYear = 0; //simulation period is 35 years from 0-34;
     int currentWeek = 0; //the week is from 0-51 in the current year
@@ -206,12 +207,14 @@ public class PSHBEnvironment extends SimState {
                 debugWriter.createFile(debugHeader);
             }
 
-            // log
-            String[] logHeader = {"currentStep", "currentWeek", "currentYear", "agentID", "Stage", "currentAge",
-                    "longitude", "latitude", "tempGridX", "tempGridY", "vegGridX", "vegGridY", "patchID", "actionExecuted"};
-            String logPath = OutputWriter.getFileName(this.logFile, false);
-            logWriter = new OutputWriter(logPath);
-            logWriter.createFile(logHeader);
+            // log (only created when mpWeeklyLog is enabled)
+            if (mpWeeklyLog) {
+                String[] logHeader = {"currentStep", "currentWeek", "currentYear", "agentID", "Stage", "currentAge",
+                        "longitude", "latitude", "tempGridX", "tempGridY", "vegGridX", "vegGridY", "patchID", "actionExecuted"};
+                String logPath = OutputWriter.getFileName(this.logFile, false);
+                logWriter = new OutputWriter(logPath);
+                logWriter.createFile(logHeader);
+            }
 
             // agent summary
             String[] agentSummaryHeader = {"step", "agentID", "birthday", "date of death", "lon at birth",
@@ -461,8 +464,8 @@ public class PSHBEnvironment extends SimState {
         } else {
             int patchID = (int) pixelValue;
             int mapCode = vegInfo.get(patchID).mapCode;
-//            double pWillowSum = vegInfo.get(patchID).pTrWillow + vegInfo.get(patchID).pShWillowM;
-            double pWillowSum = 0.3;
+            double pWillowSum = vegInfo.get(patchID).pTrWillow + vegInfo.get(patchID).pShWillowM;
+//            double pWillowSum = 0.3; //change back to correct fomula 2026-07-30
             //debug: 2026-04-22
             if (patchID != 0 && vegInfo.containsKey(patchID)) {
                 if(mapCode <= 217 && mapCode >= 111) { //check primary veg type
@@ -574,6 +577,10 @@ public class PSHBEnvironment extends SimState {
     public boolean getMpPshbWeeklyOutput() { return mpPshbWeeklyOutput; }
 
     public void setMpPshbWeeklyOutput(boolean mpPshbWeeklyOutput) { this.mpPshbWeeklyOutput = mpPshbWeeklyOutput; }
+
+    public boolean isMpWeeklyLog() { return mpWeeklyLog; }
+
+    public void setMpWeeklyLog(boolean mpWeeklyLog) { this.mpWeeklyLog = mpWeeklyLog; }
 
     public double getMpPshbShouldIStay() { return mpPshbShouldIStay; }
 

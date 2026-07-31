@@ -149,7 +149,7 @@ public class PSHBAgent implements Steppable {
                 eState.currentYear, this.pshbAgentID, this.pshbStage, this.pshbAge, this.longitudeX,
                 this.latitudeY, this.tempGridX, this.tempGridY, this.vegGridX, this.vegGridY, this.patchID,
                 this.actionExecuted);
-        eState.logWriter.addToFile(agentStepLog);
+        if (eState.logWriter != null) eState.logWriter.addToFile(agentStepLog);
         this.actionExecuted = "null"; //reset the action executed
         //Step 3: age increment by one
         this.pshbAge ++; //age increment in week

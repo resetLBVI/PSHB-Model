@@ -1,9 +1,9 @@
 {
   "_comment": "Parameter sweep configuration for PSHB model.",
 
-  "jar": "RESET_PSHB_2026-06-02.jar",
+  "jar": "RESET_PSHB_2026-07-17.jar",
 
-  "seeds": [42, 123, 456],
+  "seeds": [42],
 
   "mode": "one_at_a_time",
   "_mode_options": [
@@ -13,24 +13,25 @@
 
   "_sweep_note": "First value of each list = baseline for one_at_a_time mode. Keep it aligned with PSHBEnvironment defaults.",
   "sweep": {
-    "mpProbMate":          [0.65, 0.4, 0.5, 0.8],
-    "mpPshbMove":          [2300, 1000, 1500, 3000, 4000],
-    "mpPshbSpawn":         [5, 3, 7, 10],
-    "mpPshbShouldIStay":   [0.5, 0.2, 0.35, 0.65, 0.8],
-    "mpPshbMortLarva":     [0.01, 0.001, 0.005, 0.05],
-    "mpPshbMortAdultDisp": [0.01, 0.001, 0.005, 0.05]
+    "mpProbMate":          [0.65, 0.2, 0.4, 0.5, 0.8, 1.0],
+    "mpPshbMove":          [2300, 50, 100, 500, 1000, 4000, 6000, 10000],
+    "mpPshbDirStdDev":     [30, 10, 60, 100, 180],
+    "mpPshbSpawn":         [3, 1, 2, 4],
+    "mpPshbShouldIStay":   [0.5, 0.1, 0.2, 0.8, 1.0],
+    "mpPshbMortLarva":     [0.03, 0.01, 0.02, 0.04],
+    "mpPshbMortAdultDisp": [0.03, 0.01, 0.02, 0.04]
   },
 
   "fixed": {
-    "mpPshbMortPreovi":    0.01,
-    "mpPshbMortAdultCol":  0.01,
-    "mpPshbDirStdDev":     30,
-    "weeklyOutput":        false
+    "mpPshbMortPreovi":    0.03,
+    "mpPshbMortAdultCol":  0.03,
+    "weeklyOutput":        false,
+    "weeklyLog":           false
   },
 
   "heap": "8g",
-  "_heap_comment": "Max JVM heap per run (-Xmx). heap x parallel_jobs must stay under total RAM (32 GB).",
+  "_heap_comment": "Max JVM heap per run (-Xmx). heap x parallel_jobs must stay under ~13 GB on a 16 GB machine (leaves ~3 GB for OS + JVM native overhead).",
 
-  "parallel_jobs": 3,
+  "parallel_jobs": 8,
   "_parallel_comment": "Number of runs to execute in parallel. Set to 1 for sequential."
 }

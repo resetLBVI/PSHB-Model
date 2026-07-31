@@ -35,6 +35,7 @@ public class PSHBHeadless {
         double  mpPshbMortAdultDisp = parseDouble (args, "-mpPshbMortAdultDisp", 0.01);
         double  mpPshbMortAdultCol  = parseDouble (args, "-mpPshbMortAdultCol",  0.01);
         boolean weeklyOutput        = parseBoolean(args, "-weeklyOutput",        false);
+        boolean weeklyLog           = parseBoolean(args, "-weeklyLog",           false);
 
         System.out.printf("[PSHBHeadless] runId=%s  seed=%d%n", runId, seed);
         System.out.printf("  mpProbMate=%.3f  mpPshbMove=%d  mpPshbSpawn=%d%n",
@@ -43,7 +44,7 @@ public class PSHBHeadless {
                 mpPshbShouldIStay, mpPshbDirStdDev);
         System.out.printf("  mort(larva=%.4f preovi=%.4f disp=%.4f col=%.4f)%n",
                 mpPshbMortLarva, mpPshbMortPreovi, mpPshbMortAdultDisp, mpPshbMortAdultCol);
-        System.out.printf("  weeklyOutput=%b%n", weeklyOutput);
+        System.out.printf("  weeklyOutput=%b  weeklyLog=%b%n", weeklyOutput, weeklyLog);
 
         // ---- create and configure environment ----
         PSHBEnvironment env = new PSHBEnvironment(seed);
@@ -58,6 +59,7 @@ public class PSHBHeadless {
         env.mpPshbMortAdultDisp = mpPshbMortAdultDisp;
         env.mpPshbMortAdultCol  = mpPshbMortAdultCol;
         env.mpPshbWeeklyOutput  = weeklyOutput;
+        env.mpWeeklyLog         = weeklyLog;
 
         // ---- redirect outputs to per-run subdirectory ----
         String prefix = "runs/" + runId + "/";
@@ -71,7 +73,7 @@ public class PSHBHeadless {
         writeParamsJson(prefix, runId, seed,
                 mpProbMate, mpPshbMove, mpPshbDirStdDev, mpPshbShouldIStay, mpPshbSpawn,
                 mpPshbMortLarva, mpPshbMortPreovi, mpPshbMortAdultDisp, mpPshbMortAdultCol,
-                weeklyOutput);
+                weeklyOutput, weeklyLog);
 
         // ---- run simulation ----
         long wallStart = System.currentTimeMillis();
@@ -98,7 +100,7 @@ public class PSHBHeadless {
             double mpPshbShouldIStay, int mpPshbSpawn,
             double mpPshbMortLarva, double mpPshbMortPreovi,
             double mpPshbMortAdultDisp, double mpPshbMortAdultCol,
-            boolean weeklyOutput) {
+            boolean weeklyOutput, boolean weeklyLog) {
 
         try {
             String paramsFilePath = pshb.Utils.OutputWriter.getFileName(prefix + "run_params.json", false);
@@ -120,12 +122,13 @@ public class PSHBHeadless {
                 "  \"mpPshbMortPreovi\":    %.6f,\n" +
                 "  \"mpPshbMortAdultDisp\": %.6f,\n" +
                 "  \"mpPshbMortAdultCol\":  %.6f,\n" +
-                "  \"weeklyOutput\":        %b\n" +
+                "  \"weeklyOutput\":        %b,\n" +
+                "  \"weeklyLog\":           %b\n" +
                 "}\n",
                 runId, seed,
                 mpProbMate, mpPshbMove, mpPshbDirStdDev, mpPshbShouldIStay, mpPshbSpawn,
                 mpPshbMortLarva, mpPshbMortPreovi, mpPshbMortAdultDisp, mpPshbMortAdultCol,
-                weeklyOutput);
+                weeklyOutput, weeklyLog);
 
             try (java.io.FileWriter fw = new java.io.FileWriter(paramsFilePath)) {
                 fw.write(json);
