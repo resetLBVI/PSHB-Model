@@ -15,26 +15,29 @@ PSHBVegCell implements Steppable {
     int vegGridX; //x location
     int vegGridY; //y location
     int patchID; //the patch a veg cell belongs to
+    int terrID; //the territory a veg cell belongs to
     int numColonizedAgents; // the current number of colonized agents should be less than 5 to keep the cell alive. The capacity of the cell is 5
     boolean deadVegetation; //when the cell is dead, it's true
     //scheduling
     Stoppable event; //schedule to stop the event
 
     //Constructor
-    public PSHBVegCell(PSHBEnvironment state,Bag members, int vegGridX, int vegGridY, int patchID) {
+    public PSHBVegCell(PSHBEnvironment state,Bag members, int vegGridX, int vegGridY, int patchID, int terrID) {
         this.members = members;
         this.vegGridX = vegGridX;
         this.vegGridY = vegGridY;
         this.patchID = patchID;
+        this.terrID = terrID;
         this.numColonizedAgents = 0;
         this.deadVegetation = false;
         for(int i=0; i<members.numObjs; i++){
             PSHBAgent a = (PSHBAgent) members.objs[i];
             a.setPshbHostCell(this);
         }
-        String activateInfo = String.format("%s,%s,%s,%s,%s,%s", state.currentYear, state.currentWeek,
-                this.deadVegetation, this.vegGridX, this.vegGridY, patchID);
-        state.impactWriter.addToFile(activateInfo);
+        //comment off on 2026-09-30 because this activate info is not belong to impact information
+//        String activateInfo = String.format("%s,%s,%s,%s,%s,%s,%s", state.currentYear, state.currentWeek,
+//                this.deadVegetation, this.vegGridX, this.vegGridY, patchID, this.terrID);
+//        state.impactWriter.addToFile(activateInfo);
     }
 
     @Override
@@ -44,8 +47,8 @@ PSHBVegCell implements Steppable {
             //collect impact data when a cell is dead - collect "year" "vegGridX" "vegGridY" "patchID"
             numColonizedAgents = 0; //reset
             this.deadVegetation = true;
-            String impactInfo = String.format("%s,%s,%s,%s,%s,%s", eState.currentYear, eState.currentWeek,
-                    this.deadVegetation, this.vegGridX, this.vegGridY, this.patchID);
+            String impactInfo = String.format("%s,%s,%s,%s,%s,%s,%s", eState.currentYear, eState.currentWeek,
+                    this.deadVegetation, this.vegGridX, this.vegGridY, this.patchID, this.terrID);
             eState.impactWriter.addToFile(impactInfo);
             death((PSHBEnvironment)state); //execute the death method
         }

@@ -47,6 +47,14 @@ public class OutputWriter {
         }
     }
 
+    public void flush() {
+        try {
+            if (writer != null) { writer.flush(); }
+        } catch (IOException e) {
+            System.out.println("exception occurred when flushing writer: " + e);
+        }
+    }
+
     public void close() {
         try {
             if (writer != null) { writer.close(); }

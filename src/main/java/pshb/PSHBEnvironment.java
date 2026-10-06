@@ -47,16 +47,16 @@ public class PSHBEnvironment extends SimState {
     }
     Path currentRelativePath = Paths.get("");
     String projectPath = currentRelativePath.toAbsolutePath().toString();
-    // Master switch for verbose debug logging (debug.txt) and hot-path console prints.
+    // Master switch for the dispersal-direction debug log (RESET_PSHB_debug_dispDir.csv) and hot-path console prints.
     // Keep false for normal/performance runs; flip to true to bring all debug output back.
-    public static final boolean DEBUG = false;
+    public static final boolean DEBUG = true;
     //input and output files path
-    public String debugFile = "RESET_PSHB_debug.txt";
+    public String debugFile_dispDir = "RESET_PSHB_debug_dispDir.csv";
     public String logFile = "logPSHBWeekly.csv";
     public String agentSummaryFile = "RESET_PSHB_agentSummary.csv";
     public String popSummaryFile = "RESET_PSHB_popSummary.csv";
     public String impactFile = "RESET_PSHB_impact.csv";
-    OutputWriter debugWriter;
+    OutputWriter debugWriter_dispDir;
     OutputWriter logWriter;
     OutputWriter agentSummaryWriter;
     OutputWriter popSummaryWriter;
@@ -71,10 +71,13 @@ public class PSHBEnvironment extends SimState {
     //veg maps
     CoordinateReferenceSystem crsPrHost;
     CoordinateReferenceSystem crsPrRepr;
+    CoordinateReferenceSystem crsTerr;
     GridGeometry2D ggHost;
     GridGeometry2D ggRepr;
+    GridGeometry2D ggTerr;
     LazyVegGeoTiff vegHost; //primary Host raster
     LazyVegGeoTiff vegRepr; //primary reproduction raster
+    LazyVegGeoTiff pseudoTerr; //territory-ID raster (terrID per 30m cell); own grid, query by world coord
     //SparseGrid2D can hold multiple objects per location
     public SparseGrid2D agentDevelopGrid; //this raster map is for agent's development, which is based on the temperature maps
     public SparseGrid2D agentColonizedGrid; // this raster map is for agent's colonization and reproduction, which is based on the vegetation maps
@@ -113,6 +116,8 @@ public class PSHBEnvironment extends SimState {
     public double mpPshbShouldIStay = 0.5; //stay in the same cell if the vegetation cell is not dead
     //colonization
     public Map<String, PSHBVegCell> vegMapCell = new HashMap<>(); // create a vegMapCell to contain the agents in the cell. The map key is the x-y location of the cell
+    double mpPshbVegMapPrHost; //the probability to host a tree in a specific cell (from veg Map_PrHost)
+    double mpPshbColSuccess; //the probability successfully colonize a host tree (from veg Map_PrRepr)
     //reproduction
     public int mpPshbSpawn = 5; //the mean of a Poisson distribution from which the number of agents spawned is drawn
     //data collection
@@ -176,7 +181,7 @@ public class PSHBEnvironment extends SimState {
         if (tempService != null) {
             try { tempService.close(); } catch (Exception ignored) {}
         }
-        if (debugWriter      != null) debugWriter.close();
+        if (debugWriter_dispDir != null) debugWriter_dispDir.close();
         if (logWriter        != null) logWriter.close();
         if (agentSummaryWriter != null) agentSummaryWriter.close();
         if (popSummaryWriter != null) popSummaryWriter.close();
@@ -184,14 +189,16 @@ public class PSHBEnvironment extends SimState {
     }
 
     /**
-     * Write a line to the debug log, but only when DEBUG logging is enabled.
-     * When DEBUG is false the debugWriter is never created, so this is a no-op
-     * and avoids any per-agent / per-step file I/O.
+     * Flush all output writers to disk. Called periodically (once per simulated week) so that
+     * low-volume files (e.g. impact) become visible during a run instead of staying in the
+     * BufferedWriter until the simulation ends and close() flushes them.
      */
-    public void debugLog(String text) {
-        if (DEBUG && debugWriter != null) {
-            debugWriter.addToFile(text);
-        }
+    public void flushWriters() {
+        if (debugWriter_dispDir != null) debugWriter_dispDir.flush();
+        if (logWriter        != null) logWriter.flush();
+        if (agentSummaryWriter != null) agentSummaryWriter.flush();
+        if (popSummaryWriter != null) popSummaryWriter.flush();
+        if (impactWriter     != null) impactWriter.flush();
     }
 
     // ------------------------------------------------------------------------------------
@@ -199,14 +206,6 @@ public class PSHBEnvironment extends SimState {
     // ------------------------------------------------------------------------------------
     private void initWriters() {
         try {
-            // debug (only created when DEBUG logging is enabled)
-            if (DEBUG) {
-                String[] debugHeader = {};
-                debugFile = OutputWriter.getFileName(this.debugFile, false);
-                debugWriter = new OutputWriter(debugFile);
-                debugWriter.createFile(debugHeader);
-            }
-
             // log (only created when mpWeeklyLog is enabled)
             if (mpWeeklyLog) {
                 String[] logHeader = {"currentStep", "currentWeek", "currentYear", "agentID", "Stage", "currentAge",
@@ -231,10 +230,19 @@ public class PSHBEnvironment extends SimState {
             popSummaryWriter.createFile(popSummaryHeader);
 
             // impact
-            String[] impactHeader = {"year", "week", "deadVegetation", "vegGridX", "vegGridY", "patchID"};
+            String[] impactHeader = {"year", "week", "deadVegetation", "vegGridX", "vegGridY", "patchID", "terrID"};
             String impactPath = OutputWriter.getFileName(this.impactFile, false);
             impactWriter = new OutputWriter(impactPath);
             impactWriter.createFile(impactHeader);
+
+            // dispersal-direction debug log (only created when DEBUG logging is enabled)
+            if (DEBUG) {
+                String[] dispDirHeader = {"currentStep", "currentWeek", "currentYear", "agentID", "dispCount",
+                        "isSecondOrLater", "dirPrevDeg", "dirNewDeg", "turnDeg", "dispDist", "lonFrom", "latFrom"};
+                String dispDirPath = OutputWriter.getFileName(this.debugFile_dispDir, false);
+                debugWriter_dispDir = new OutputWriter(dispDirPath);
+                debugWriter_dispDir.createFile(dispDirHeader);
+            }
 
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -323,6 +331,19 @@ public class PSHBEnvironment extends SimState {
         this.crsPrRepr = vegRepr.getCRS();
         ggHost = vegHost.getGridGeometry();  // we need GridGeometry2D for coordinate transformation
         ggRepr = vegRepr.getGridGeometry();
+
+        // Territory-ID raster: different extent/size than the veg rasters (but same 30m grid,
+        // aligned to whole cells, and the veg extent is fully inside it). We must query it by
+        // WORLD coordinate through its OWN grid geometry, never by vegGridX/vegGridY.
+        String terrFileName = OutputWriter.getFileName("RESET_PSHB_inputData/pseudoterr_raster_converted.tif", true).replace("%20", " ");
+        File tiffTerr = new File(terrFileName);
+        if (DEBUG) {
+            System.out.println("Trying to read terr raster: " + tiffTerr.getAbsolutePath());
+            System.out.println("Exists? " + tiffTerr.exists() + " Can read? " + tiffTerr.canRead());
+        }
+        pseudoTerr = new LazyVegGeoTiff(tiffTerr); //tile-backed; do NOT call getData() on the whole image
+        this.crsTerr = pseudoTerr.getCRS();
+        ggTerr = pseudoTerr.getGridGeometry();
     }
 
     //update week and year
@@ -399,6 +420,34 @@ public class PSHBEnvironment extends SimState {
             return patchID;
         }
     }
+
+    //Get the territory ID for a world coordinate (lon/lat in the veg CRS, EPSG:3310 metres).
+    //The terr raster has its OWN grid, so we convert the coordinate through ggTerr rather than
+    //reusing vegGridX/vegGridY (whose origin/size differ from the terr raster).
+    //Returns 0 for "no territory" (background value) or when the point falls outside the raster.
+    //Valid territory IDs run 0..~68305; every other cell is a NoData fill (read as 2^32 =
+    //4294967296.0, which would saturate to Integer.MAX_VALUE if cast straight to int), so we
+    //map anything outside the valid range to 0.
+    static final double TERR_ID_MAX = 68305;
+    public int getTerrID(PSHBEnvironment state, double lon, double lat) {
+        try {
+            int[] g = CoordinateConverter.coordToGrid(state.crsTerr, state.ggTerr, lon, lat);
+            int col = g[0], row = g[1];
+            if (!pseudoTerr.inBounds(col, row)) {
+                return 0; //outside the terr raster coverage
+            }
+            double v = pseudoTerr.valueAtGrid(col, row);
+            if (Double.isNaN(v) || v < 0 || v > TERR_ID_MAX) {
+                return 0; //NoData / background -> no territory
+            }
+            return (int) v; //0 = no territory (kept as 0 per requirement)
+        } catch (TransformException e) {
+            if (DEBUG) System.out.println("getTerrID transform failed at (" + lon + ", " + lat + "): " + e.getMessage());
+            return 0;
+        }
+    }
+
+
 
     public double getVegMapPrHost(PSHBEnvironment state, double coordX, double coordY)
             throws TransformException, IOException {

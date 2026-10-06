@@ -17,7 +17,7 @@ package pshb;
  */
 public class PSHBHeadless {
 
-    // 35 years × 52 weeks per year
+    // 35 years × 52 weeks per year (default; override with -totalSteps)
     private static final int TOTAL_STEPS = 35 * 52;
 
     public static void main(String[] args) {
@@ -36,6 +36,7 @@ public class PSHBHeadless {
         double  mpPshbMortAdultCol  = parseDouble (args, "-mpPshbMortAdultCol",  0.01);
         boolean weeklyOutput        = parseBoolean(args, "-weeklyOutput",        false);
         boolean weeklyLog           = parseBoolean(args, "-weeklyLog",           false);
+        int     totalSteps          = parseInt    (args, "-totalSteps",          TOTAL_STEPS);
 
         System.out.printf("[PSHBHeadless] runId=%s  seed=%d%n", runId, seed);
         System.out.printf("  mpProbMate=%.3f  mpPshbMove=%d  mpPshbSpawn=%d%n",
@@ -44,7 +45,7 @@ public class PSHBHeadless {
                 mpPshbShouldIStay, mpPshbDirStdDev);
         System.out.printf("  mort(larva=%.4f preovi=%.4f disp=%.4f col=%.4f)%n",
                 mpPshbMortLarva, mpPshbMortPreovi, mpPshbMortAdultDisp, mpPshbMortAdultCol);
-        System.out.printf("  weeklyOutput=%b  weeklyLog=%b%n", weeklyOutput, weeklyLog);
+        System.out.printf("  weeklyOutput=%b  weeklyLog=%b  totalSteps=%d%n", weeklyOutput, weeklyLog, totalSteps);
 
         // ---- create and configure environment ----
         PSHBEnvironment env = new PSHBEnvironment(seed);
@@ -63,7 +64,7 @@ public class PSHBHeadless {
 
         // ---- redirect outputs to per-run subdirectory ----
         String prefix = "runs/" + runId + "/";
-        env.debugFile        = prefix + "RESET_PSHB_debug.txt";
+        env.debugFile_dispDir = prefix + "RESET_PSHB_debug_dispDir.csv";
         env.logFile          = prefix + "logPSHBWeekly.csv";
         env.agentSummaryFile = prefix + "RESET_PSHB_agentSummary.csv";
         env.popSummaryFile   = prefix + "RESET_PSHB_popSummary.csv";
@@ -80,7 +81,7 @@ public class PSHBHeadless {
         env.start();
         do {
             if (!env.schedule.step(env)) break;
-        } while (env.schedule.getSteps() < TOTAL_STEPS);
+        } while (env.schedule.getSteps() < totalSteps);
         env.finish();
 
         long elapsed = (System.currentTimeMillis() - wallStart) / 1000;

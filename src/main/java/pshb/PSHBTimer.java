@@ -11,6 +11,8 @@ public class PSHBTimer implements Steppable {
         eState.updateYear();
         eState.updateWeek();
         eState.rollToWeekForTempMaps(eState.currentWeek);
+        // Flush buffered output once per week so low-volume files (e.g. impact) are visible mid-run.
+        eState.flushWriters();
         System.out.println("Update -> week: " + eState.currentWeek + "  year: " + eState.currentYear);
     }
 }
