@@ -43,7 +43,7 @@ PSHBVegCell implements Steppable {
     @Override
     public void step(SimState state) {
         PSHBEnvironment eState = (PSHBEnvironment) state;
-        if(numColonizedAgents >= 5 && eState.currentWeek ==1) { //update in the second week of the year (Section 3.3)
+        if(numColonizedAgents >= eState.cellDamageThreshold && eState.currentWeek ==1) { //update in the second week of the year (Section 3.3)
             //collect impact data when a cell is dead - collect "year" "vegGridX" "vegGridY" "patchID"
             numColonizedAgents = 0; //reset
             this.deadVegetation = true;
@@ -51,6 +51,8 @@ PSHBVegCell implements Steppable {
                     this.deadVegetation, this.vegGridX, this.vegGridY, this.patchID, this.terrID);
             eState.impactWriter.addToFile(impactInfo);
             death((PSHBEnvironment)state); //execute the death method
+        } else if (numColonizedAgents == 0) { //emptied out by attrition (all members died before the threshold)
+            death(eState); //no vegetation damage occurred, so no impact row; just stop the schedule and free the cell
         }
     }
 
