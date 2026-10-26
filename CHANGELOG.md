@@ -2,29 +2,6 @@
 
 ---
 
-## 2026-10-26
-
-### 1. Feature: Colored vegetation-cell state layer in the GUI (`PSHBWorldWithUI.java`, `PSHBEnvironment.java`, `PSHBAgent.java`, `PSHBVegCell.java`)
-- Added a visual layer that colors each vegetation cell by its colonization state:
-  **green** = activated (colonized, not yet damaged), **red** = vegetation damaged, **transparent** = none.
-  Red persists after the cell object is freed, giving a lasting record of damaged vegetation.
-- Implemented as a state value grid decoupled from the `PSHBVegCell` object lifecycle (the cell object
-  is removed the same step it is damaged or emptied, so driving colors off the live objects could never
-  show persistent red).
-
-| File | Change |
-|------|--------|
-| `PSHBEnvironment.java` | Added `IntGrid2D cellStateGrid` (veg-map resolution) + constants `CELL_STATE_NONE/ACTIVE/DAMAGED`; initialized to all-none |
-| `PSHBAgent.java` | `colonizeAHost()` sets the cell `ACTIVE` when a new cell is activated |
-| `PSHBVegCell.java` | `step()` sets `DAMAGED` on the damage branch (before `death()`, so red persists) and `NONE` on the attrition branch |
-| `PSHBWorldWithUI.java` | New `FastValueGridPortrayal2D` + `SimpleColorMap` (transparent/green/red, semi-transparent), attached between the background image and the agent layer |
-
-- **Scope:** GUI only (`PSHBWorldWithUI`); headless runs are unaffected.
-- **To verify:** on first GUI run, sanity-check that the colored squares align with the background
-  image — cells are at veg-grid resolution and MASON scales each layer independently.
-
----
-
 ## 2026-10-25
 
 ### 1. Bug Fix: Recorded population size stuck after die-out (`PSHBObserver.java`)

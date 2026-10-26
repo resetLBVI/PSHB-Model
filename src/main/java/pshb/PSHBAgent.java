@@ -476,7 +476,6 @@ public class PSHBAgent implements Steppable {
                 state.agentDevelopGrid.setObjectLocation(newActiveCell, vegGridX, vegGridY); //also set the agent in the master grid
                 double cellNextTick = state.schedule.getTime() + 1; //schedule the newly activated cell so its step() runs each week
                 newActiveCell.event = state.schedule.scheduleRepeating(cellNextTick, 1, newActiveCell); //store the Stoppable so the cell can be stopped later
-                state.cellStateGrid.set(vegGridX, vegGridY, PSHBEnvironment.CELL_STATE_ACTIVE); //visualization: mark this cell green (active)
             } else { //if there is already someone in this location
                 PSHBVegCell joinCurrentCell = state.getVegCell(vegGridX, vegGridY); //get the active cell
                 joinCurrentCell.addCellMembers(this); //add this current agent into the cell

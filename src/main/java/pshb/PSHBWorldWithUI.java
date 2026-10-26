@@ -30,7 +30,6 @@ import sim.portrayal.simple.OvalPortrayal2D;
 
 import org.geotools.coverage.grid.io.imageio.MaskOverviewProvider;
 import sim.util.Int2D;
-import sim.util.gui.SimpleColorMap;
 
 import javax.imageio.spi.IIORegistry;
 
@@ -61,7 +60,6 @@ public class PSHBWorldWithUI extends GUIState {
     JFrame displayFrame; //create a display frame
 //    FastValueGridPortrayal2D temperatureGridPortrayal2D = new FastValueGridPortrayal2D("temperature grid");
     SparseGridPortrayal2D backgroundPortrayal = new SparseGridPortrayal2D();
-    FastValueGridPortrayal2D cellStatePortrayal = new FastValueGridPortrayal2D("Veg Cells"); //green=active, red=damaged, transparent=none
     SparseGridPortrayal2D PSHBAgentPortrayal = new SparseGridPortrayal2D() {
         @Override
         public SimplePortrayal2D getPortrayalForObject(Object obj) {
@@ -165,22 +163,12 @@ public class PSHBWorldWithUI extends GUIState {
             }
         });
 
-        // 4) Veg-cell state layer (green=active, red=damaged, transparent=none)
-        cellStatePortrayal.setField(eState.cellStateGrid);
-        // index 0 -> NONE (transparent), 1 -> ACTIVE (green), 2 -> DAMAGED (red); alpha keeps the background photo readable
-        cellStatePortrayal.setMap(new SimpleColorMap(new Color[]{
-                new Color(0, 0, 0, 0),      // CELL_STATE_NONE
-                new Color(0, 180, 0, 160),  // CELL_STATE_ACTIVE
-                new Color(220, 0, 0, 180)   // CELL_STATE_DAMAGED
-        }));
-
-        // 5) Agents layer
+        // 4) Agents layer
         PSHBAgentPortrayal.setField(eState.agentDisplayGrid);
 
-        // 6) Attach layers in order: background first, then veg-cell states, then agents on top
+        // 5) Attach layers in order: background first, then agents
         display.detachAll();
         display.attach(backgroundPortrayal, "Image Layer", true); // 'true' = behind others
-        display.attach(cellStatePortrayal, "Veg Cells");
         display.attach(PSHBAgentPortrayal, "PSHB Agents");
 
         // 6) Misc display tweaks
