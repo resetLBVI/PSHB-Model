@@ -8,7 +8,6 @@ import pshb.Utils.*;
 import sim.engine.Schedule;
 import sim.engine.SimState;
 import sim.field.grid.SparseGrid2D;
-import sim.field.grid.IntGrid2D;
 
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
@@ -83,11 +82,6 @@ public class PSHBEnvironment extends SimState {
     public SparseGrid2D agentDevelopGrid; //this raster map is for agent's development, which is based on the temperature maps
     public SparseGrid2D agentColonizedGrid; // this raster map is for agent's colonization and reproduction, which is based on the vegetation maps
     public SparseGrid2D agentDisplayGrid;
-    //visualization: per-cell vegetation state at veg-map resolution (decoupled from the PSHBVegCell object lifecycle)
-    public static final int CELL_STATE_NONE = 0;    //no active cell here -> drawn transparent
-    public static final int CELL_STATE_ACTIVE = 1;  //colonized, not yet damaged -> drawn green
-    public static final int CELL_STATE_DAMAGED = 2; //vegetation damaged -> drawn red (persists after the cell object is freed)
-    public IntGrid2D cellStateGrid;
     // ------------------------------------------------------------------------------------
     // Vegetation attributes
     // ------------------------------------------------------------------------------------
@@ -157,7 +151,6 @@ public class PSHBEnvironment extends SimState {
         try {
             importTiffVegRasterMaps();
             this.agentColonizedGrid = new SparseGrid2D(vegHost.getWidth(), vegHost.getHeight());
-            this.cellStateGrid = new IntGrid2D(vegHost.getWidth(), vegHost.getHeight(), CELL_STATE_NONE); //same resolution as the colonized grid; starts all-none
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
