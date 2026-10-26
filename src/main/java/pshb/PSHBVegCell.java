@@ -50,8 +50,10 @@ PSHBVegCell implements Steppable {
             String impactInfo = String.format("%s,%s,%s,%s,%s,%s,%s", eState.currentYear, eState.currentWeek,
                     this.deadVegetation, this.vegGridX, this.vegGridY, this.patchID, this.terrID);
             eState.impactWriter.addToFile(impactInfo);
+            eState.cellStateGrid.set(this.vegGridX, this.vegGridY, PSHBEnvironment.CELL_STATE_DAMAGED); //visualization: mark red; persists after death() frees the cell object
             death((PSHBEnvironment)state); //execute the death method
         } else if (numColonizedAgents == 0) { //emptied out by attrition (all members died before the threshold)
+            eState.cellStateGrid.set(this.vegGridX, this.vegGridY, PSHBEnvironment.CELL_STATE_NONE); //visualization: no damage occurred -> clear color
             death(eState); //no vegetation damage occurred, so no impact row; just stop the schedule and free the cell
         }
     }
